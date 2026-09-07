@@ -1242,7 +1242,7 @@ export function isAnthropicProvider(provider: string | undefined): boolean {
 }
 
 /**
- * 计算单次请求的缓存命中率，口径与 calculateCost 保持一致。
+ * 计算单次请求的输入上下文总量，口径与 calculateCost 保持一致。
  *
  * 分母是「上下文总量」= 纯输入 + 缓存读取 + 缓存创建，而非 input_tokens：
  * - Claude/Anthropic：input_tokens 不含缓存，纯输入 = input_tokens（加法）。
@@ -1251,14 +1251,14 @@ export function isAnthropicProvider(provider: string | undefined): boolean {
  * - 其它 provider：input_tokens 为输入总量，纯输入 = input_tokens − 缓存
  *   读取 − 缓存创建（下取 0），相加后分母仍等于 input_tokens（行为不变）。
  *
- * 上下文总量为 0 时返回 null（调用方显示为 '--'）。
+ * 不包含输出或推理 token，避免把请求总消耗误标为输入上下文。
  */
-export function calculateCacheHitRatio(params: {
+export function calculateContextTokens(params: {
   provider?: string;
   inputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
-}): number | null {
+}): number {
   const inputTokens = Math.max(params.inputTokens, 0);
   const cacheReadTokens = Math.max(params.cacheReadTokens, 0);
   const cacheCreationTokens = Math.max(params.cacheCreationTokens, 0);
@@ -1266,12 +1266,17 @@ export function calculateCacheHitRatio(params: {
   const pureInputTokens = isAnthropicProvider(params.provider)
     ? inputTokens
     : Math.max(inputTokens - cacheReadTokens - cacheCreationTokens, 0);
-  const contextTokens = pureInputTokens + cacheReadTokens + cacheCreationTokens;
+  return pureInputTokens + cacheReadTokens + cacheCreationTokens;
+}
+
+/** 上下文为零时没有可计算的命中率，调用方显示 '--'。 */
+export function calculateCacheHitRatio(params: Parameters<typeof calculateContextTokens>[0]): number | null {
+  const contextTokens = calculateContextTokens(params);
 
   if (contextTokens <= 0) {
     return null;
   }
-  return cacheReadTokens / contextTokens;
+  return Math.max(params.cacheReadTokens, 0) / contextTokens;
 }
 
 /**

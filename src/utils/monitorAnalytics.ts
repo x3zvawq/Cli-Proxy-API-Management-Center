@@ -1,6 +1,7 @@
 import {
   buildUsageSnapshotFromDetails,
   calculateCost,
+  calculateContextTokens,
   collectUsageDetailsWithEndpoint,
   extractFirstByteLatencyMs,
   extractTotalTokens,
@@ -74,12 +75,26 @@ export function summarizeMonitorUsage(usage: unknown) {
     .filter((value): value is number => value !== null && value >= 0);
   const sum = (name: keyof UsageDetailWithEndpoint['tokens']) =>
     details.reduce((total, detail) => total + (detail.tokens[name] ?? 0), 0);
+  const contextTokens = details.reduce(
+    (total, detail) =>
+      total +
+      calculateContextTokens({
+        provider: detail.provider,
+        inputTokens: detail.tokens.input_tokens,
+        cacheReadTokens: detail.tokens.cached_tokens,
+        cacheCreationTokens: detail.tokens.cache_creation_tokens ?? 0,
+      }),
+    0
+  );
+  const cached = sum('cached_tokens');
   return {
     input: sum('input_tokens'),
     output: sum('output_tokens'),
     reasoning: sum('reasoning_tokens'),
-    cached: sum('cached_tokens'),
+    cached,
     cacheCreation: sum('cache_creation_tokens'),
+    contextTokens,
+    cacheHitRatio: contextTokens > 0 ? cached / contextTokens : null,
     ttftP50: percentile(ttft, 0.5),
     ttftP95: percentile(ttft, 0.95),
     ttftSamples: ttft.length,

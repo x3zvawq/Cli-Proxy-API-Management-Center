@@ -1,5 +1,15 @@
 {
   "monitor_custom": {
+    "token_column": "Token（↑ 输入 / ↓ 输出）",
+    "token_details": "Token 详情",
+    "context": "输入上下文总量",
+    "context_short": "上下文",
+    "cache_write": "缓存写入",
+    "context_hint": "上下文是本次请求的输入总量，不是模型容量或整段会话累计。OpenAI 输入通常已含缓存；Claude 输入需加缓存读写。思考可能已含在输出中，勿重复相加。",
+    "cache_summary": "当前筛选区间 · 缓存读写",
+    "weighted_cache_hit": "综合缓存命中率",
+    "context_sum": "累计输入上下文",
+    "cache_summary_hint": "按当前时间、Key、模型、来源及结果筛选汇总。综合命中率 = 缓存读取总 Token ÷ 输入上下文总 Token（按 Token 加权，非逐条百分比平均）；缓存写入已计入上下文。",
     "trend_title": "用量与费用趋势",
     "bucket_hint": "各点为时间桶内合计，长区间自动合并至约 720 点。费用仅包含已设置价格的模型。",
     "custom_range": "自定义时间",

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { IconMinus } from '@/components/usage/UsageIcons';
+import { RequestTokenCell } from './RequestTokenCell';
 import { getAuthFileStatusMessage } from '@/features/authFiles/constants';
 import { useInterval } from '@/hooks/useInterval';
 import { authFilesApi } from '@/services/api/authFiles';
@@ -19,6 +20,7 @@ import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
   calculateCacheHitRatio,
+  calculateContextTokens,
   collectUsageDetailsWithEndpoint,
   extractFirstByteLatencyMs,
   extractGenerationMs,
@@ -64,6 +66,7 @@ type RequestEventRow = {
   cachedTokens: number;
   cacheCreationTokens: number;
   totalTokens: number;
+  contextTokens: number;
   cacheHitRatio: number | null;
 };
 
@@ -174,11 +177,6 @@ const formatThinkingLabel = (thinking: UsageThinking | null): string => {
     return `${label} (-1)`;
   }
   return label;
-};
-
-const formatCacheHitRatio = (ratio: number | null): string => {
-  if (ratio === null) return '--';
-  return `${(ratio * 100).toFixed(1)}%`;
 };
 
 const encodeCsv = (value: string | number): string => {
@@ -387,6 +385,12 @@ export function RequestEventsDetailsCard({
         cacheReadTokens: cachedTokens,
         cacheCreationTokens,
       });
+      const contextTokens = calculateContextTokens({
+        provider: detail.provider,
+        inputTokens,
+        cacheReadTokens: cachedTokens,
+        cacheCreationTokens,
+      });
       const serviceTier = normalizeThinkingText(detail.service_tier);
       const failStatusCode =
         typeof detail.failure_status_code === 'number' &&
@@ -424,6 +428,7 @@ export function RequestEventsDetailsCard({
         cachedTokens,
         cacheCreationTokens,
         totalTokens,
+        contextTokens,
         cacheHitRatio,
       };
     });
@@ -610,6 +615,7 @@ export function RequestEventsDetailsCard({
       'cached_tokens',
       'cache_creation_tokens',
       'total_tokens',
+      'context_tokens',
       'cache_hit_ratio',
     ];
 
@@ -636,6 +642,7 @@ export function RequestEventsDetailsCard({
         row.cachedTokens,
         row.cacheCreationTokens,
         row.totalTokens,
+        row.contextTokens,
         row.cacheHitRatio !== null ? row.cacheHitRatio.toFixed(4) : '',
       ]
         .map((value) => encodeCsv(value))
@@ -679,6 +686,7 @@ export function RequestEventsDetailsCard({
         cache_creation_tokens: row.cacheCreationTokens,
         total_tokens: row.totalTokens,
       },
+      context_tokens: row.contextTokens,
       ...(row.cacheHitRatio !== null ? { cache_hit_ratio: row.cacheHitRatio } : {}),
     }));
 
@@ -894,7 +902,8 @@ export function RequestEventsDetailsCard({
                 <col className={styles.requestEventsActionCol} />
                 <col className={styles.requestEventsTimestampCol} />
                 <col className={styles.requestEventsModelCol} />
-                <col className={styles.requestEventsSourceCol} />
+                <col className={styles.requestEventsKeyCol} />
+                <col className={styles.requestEventsTokenSummaryCol} />
                 <col className={styles.requestEventsSourceCol} />
                 <col className={styles.requestEventsTierCol} />
                 <col className={styles.requestEventsResultCol} />
@@ -902,13 +911,6 @@ export function RequestEventsDetailsCard({
                 {hasTimingData && <col className={styles.requestEventsTimingCol} />}
                 {hasTimingData && <col className={styles.requestEventsTimingCol} />}
                 <col className={styles.requestEventsThinkingCol} />
-                <col className={styles.requestEventsTokenCol} />
-                <col className={styles.requestEventsTokenCol} />
-                <col className={styles.requestEventsTokenCol} />
-                <col className={styles.requestEventsTokenCol} />
-                <col className={styles.requestEventsTokenCol} />
-                <col className={styles.requestEventsTokenCol} />
-                <col className={styles.requestEventsTokenCol} />
               </colgroup>
               <thead>
                 <tr>
@@ -916,6 +918,7 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.request_events_timestamp')}</th>
                   <th>{t('usage_stats.model_name')}</th>
                   <th>{t('monitor_custom.apiKey')}</th>
+                  <th>{t('monitor_custom.token_column')}</th>
                   <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.request_events_tier')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
@@ -923,13 +926,6 @@ export function RequestEventsDetailsCard({
                   {hasTimingData && <th>{t('usage_stats.generation_time')}</th>}
                   {hasTimingData && <th>{t('usage_stats.request_events_tps')}</th>}
                   <th>{t('usage_stats.thinking_intensity')}</th>
-                  <th>{t('usage_stats.input_tokens')}</th>
-                  <th>{t('usage_stats.output_tokens')}</th>
-                  <th>{t('usage_stats.reasoning_tokens')}</th>
-                  <th>{t('usage_stats.cached_tokens')}</th>
-                  <th>{t('usage_stats.cache_creation_tokens')}</th>
-                  <th>{t('usage_stats.total_tokens')}</th>
-                  <th>{t('usage_stats.cache_hit')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -952,6 +948,9 @@ export function RequestEventsDetailsCard({
                     </td>
                     <td className={styles.modelCell}>{row.model}</td>
                     <td title={monitorKeyLabel(row.apiKey)}>{monitorKeyLabel(row.apiKey)}</td>
+                    <td>
+                      <RequestTokenCell metrics={row} />
+                    </td>
                     <td className={styles.requestEventsSourceCell} title={row.source}>
                       <span>{row.source}</span>
                       {row.sourceType && (
@@ -1018,13 +1017,6 @@ export function RequestEventsDetailsCard({
                         {row.thinkingLabel}
                       </span>
                     </td>
-                    <td>{row.inputTokens.toLocaleString()}</td>
-                    <td>{row.outputTokens.toLocaleString()}</td>
-                    <td>{row.reasoningTokens.toLocaleString()}</td>
-                    <td>{row.cachedTokens.toLocaleString()}</td>
-                    <td>{row.cacheCreationTokens.toLocaleString()}</td>
-                    <td>{row.totalTokens.toLocaleString()}</td>
-                    <td>{formatCacheHitRatio(row.cacheHitRatio)}</td>
                   </tr>
                 ))}
               </tbody>

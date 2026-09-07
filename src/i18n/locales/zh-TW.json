@@ -1,5 +1,15 @@
 {
   "monitor_custom": {
+    "token_column": "Token（↑ 輸入 / ↓ 輸出）",
+    "token_details": "Token 詳情",
+    "context": "輸入上下文總量",
+    "context_short": "上下文",
+    "cache_write": "快取寫入",
+    "context_hint": "上下文是本次請求的輸入總量，不是模型容量或整段會話累計。OpenAI 輸入通常已含快取；Claude 輸入需加快取讀寫。思考可能已含於輸出，勿重複相加。",
+    "cache_summary": "目前篩選區間 · 快取讀寫",
+    "weighted_cache_hit": "綜合快取命中率",
+    "context_sum": "累計輸入上下文",
+    "cache_summary_hint": "依目前時間、Key、模型、來源及結果篩選彙總。綜合命中率 = 快取讀取總 Token ÷ 輸入上下文總 Token（按 Token 加權，非逐筆百分比平均）；快取寫入已計入上下文。",
     "trend_title": "用量與費用趨勢",
     "bucket_hint": "各點為時間桶內合計，長區間自動合併至約 720 點。費用僅包含已設定價格的模型。",
     "custom_range": "自訂時間",

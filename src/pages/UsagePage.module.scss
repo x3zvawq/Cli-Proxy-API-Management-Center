@@ -1160,7 +1160,7 @@
 }
 
 .requestEventsTable {
-  min-width: 1640px;
+  min-width: 1200px;
   table-layout: fixed;
 }
 
@@ -1169,35 +1169,37 @@
 }
 
 .requestEventsTimestampCol {
-  width: 170px;
+  width: 154px;
 }
 
 .requestEventsModelCol {
-  width: 160px;
+  width: 140px;
 }
 
+.requestEventsKeyCol { width: 160px; }
+
 .requestEventsSourceCol {
-  width: 228px;
+  width: 180px;
 }
 
 .requestEventsResultCol {
-  width: 86px;
+  width: 70px;
 }
 
 .requestEventsTierCol {
-  width: 96px;
+  width: 64px;
 }
 
 .requestEventsTimingCol {
-  width: 92px;
+  width: 76px;
 }
 
 .requestEventsThinkingCol {
-  width: 110px;
+  width: 88px;
 }
 
-.requestEventsTokenCol {
-  width: 100px;
+.requestEventsTokenSummaryCol {
+  width: 200px;
 }
 
 .requestEventsDeleteCell {

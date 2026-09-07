@@ -1,5 +1,15 @@
 {
   "monitor_custom": {
+    "token_column": "Tokens (↑ input / ↓ output)",
+    "token_details": "Token details",
+    "context": "Input context total",
+    "context_short": "Context",
+    "cache_write": "Cache writes",
+    "context_hint": "Context is this request's input, not model capacity or a conversation cumulative total. OpenAI input normally includes cache; Claude input requires adding cache reads/writes. Reasoning may already be included in output; do not add it twice.",
+    "cache_summary": "Selected range · cache usage",
+    "weighted_cache_hit": "Weighted cache hit rate",
+    "context_sum": "Cumulative input context",
+    "cache_summary_hint": "Uses the current time, key, model, source and result filters. Hit rate = total cache-read tokens / total input-context tokens (token-weighted, not an average of request percentages). Cache writes are included in context.",
     "trend_title": "Usage and cost trends",
     "bucket_hint": "Points are bucket totals; long ranges merge to about 720 points. Costs include priced models only.",
     "custom_range": "Custom range",

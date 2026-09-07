@@ -19,6 +19,7 @@ const records = Array.from({ length: 125 }, (_, index) => ({
     output_tokens: 100,
     reasoning_tokens: 40,
     cached_tokens: 800,
+    cache_creation_tokens: 50,
     total_tokens: 1100 + index * 10,
   },
 }));

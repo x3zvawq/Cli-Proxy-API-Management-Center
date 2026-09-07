@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   buildUsageSnapshotFromDetails,
+  calculateContextTokens,
   normalizeUsageSourceId,
   type UsageDetailWithEndpoint,
 } from '../src/utils/usage';
@@ -36,6 +37,56 @@ const snapshot = (records: UsageDetailWithEndpoint[]) => buildUsageSnapshotFromD
 const at = (ms: number) => record({ timestamp: new Date(ms).toISOString(), __timestampMs: ms });
 
 describe('monitor analytics', () => {
+  test('context does not count OpenAI cache twice and includes separate Anthropic cache', () => {
+    expect(
+      calculateContextTokens({
+        provider: 'codex',
+        inputTokens: 1000,
+        cacheReadTokens: 800,
+        cacheCreationTokens: 100,
+      })
+    ).toBe(1000);
+    expect(
+      calculateContextTokens({
+        provider: 'claude',
+        inputTokens: 100,
+        cacheReadTokens: 800,
+        cacheCreationTokens: 100,
+      })
+    ).toBe(1000);
+  });
+  test('cache totals and hit ratio are token-weighted across providers, not averaged per request', () => {
+    const tokens = (input: number, read: number, write: number) => ({
+      input_tokens: input,
+      output_tokens: 10,
+      reasoning_tokens: 5,
+      cached_tokens: read,
+      cache_creation_tokens: write,
+      total_tokens: input + 10,
+    });
+    const data = snapshot([
+      record({ provider: 'codex', tokens: tokens(100, 100, 0) }),
+      record({ provider: 'claude', tokens: tokens(800, 0, 100) }),
+    ]);
+    const result = summarizeMonitorUsage(data);
+    expect(result.contextTokens).toBe(1000);
+    expect(result.cached).toBe(100);
+    expect(result.cacheCreation).toBe(100);
+    expect(result.cacheHitRatio).toBe(0.1);
+    expect(summarizeMonitorUsage(null).cacheHitRatio).toBeNull();
+  });
+  test('cache aggregation follows the selected key and half-open time range', () => {
+    const data = snapshot([at(start), record({ __endpoint: 'another-key' }), at(start + 1000)]);
+    const scoped = filterMonitorUsage(
+      data,
+      { ...EMPTY_MONITOR_FILTERS, apiKey: 'sk-fixture-client-a-000001' },
+      { startMs: start, endMs: start + 1000 }
+    );
+    const stats = summarizeMonitorUsage(scoped);
+    expect(stats.cached).toBe(30);
+    expect(stats.contextTokens).toBe(100);
+    expect(stats.cacheHitRatio).toBe(0.3);
+  });
   test('parses local dates and rejects empty, invalid and reversed ranges', () => {
     expect(parseMonitorRange('', '')).toBeNull();
     expect(parseMonitorRange('bad', '2026-08-10T08:00')).toBeNull();
