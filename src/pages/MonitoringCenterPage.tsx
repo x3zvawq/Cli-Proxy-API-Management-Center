@@ -446,6 +446,7 @@ export function MonitoringCenterPage() {
       <div className={styles.fullWidthSection}>
         <RequestEventsDetailsCard
           usage={filteredUsage}
+          modelPrices={modelPrices}
           loading={loading}
           geminiKeys={config?.geminiApiKeys || []}
           claudeConfigs={config?.claudeApiKeys || []}

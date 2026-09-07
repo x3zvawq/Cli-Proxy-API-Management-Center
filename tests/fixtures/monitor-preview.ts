@@ -8,6 +8,9 @@ const records = Array.from({ length: 125 }, (_, index) => ({
   source: 'demo@example.test.json',
   auth_index: 'fixture-auth',
   provider: 'codex',
+  executor_type: index % 2 === 0 ? 'CodexWebsocketsExecutor' : 'CodexExecutor',
+  service_tier: 'priority',
+  reasoning_effort: 'high',
   failed: index % 10 === 0,
   ...(index % 10 === 0
     ? { failure_status_code: 429, failure_body: 'Synthetic rate limit for UI verification' }

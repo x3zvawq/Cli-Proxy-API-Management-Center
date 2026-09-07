@@ -1,5 +1,16 @@
 {
   "monitor_custom": {
+    "tier_thinking": "Tier / Reasoning",
+    "request_cost": "Est. cost (USD)",
+    "cost_estimated": "Configured rates",
+    "price_missing": "Price not set",
+    "cost_hint": "Estimated using this browser's model rates, context tiers and Tier multipliers: uncached input + cache read + cache write + output. Reasoning is not billed twice. Not an upstream invoice; missing usage cannot be estimated. Sync standard rates or enter them in price settings.",
+    "timing_column": "TTFT / Gen / TPS",
+    "ttft_short": "TTFT",
+    "generation_short": "Gen",
+    "upstream_transport": "Upstream",
+    "not_recorded": "Not recorded",
+    "transport_hint": "Upstream HTTP / WS is identified by the recorded executor, not the downstream connection. The plugin does not store the stream flag, so HTTP streaming vs non-streaming is unknown. Failed records indicate an attempted path, not a successful connection.",
     "token_column": "Tokens (↑ input / ↓ output)",
     "token_details": "Token details",
     "context": "Input context total",

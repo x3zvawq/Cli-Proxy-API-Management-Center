@@ -6,13 +6,10 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
-import { IconMinus } from '@/components/usage/UsageIcons';
 import { RequestTokenCell } from './RequestTokenCell';
 import { getAuthFileStatusMessage } from '@/features/authFiles/constants';
 import { useInterval } from '@/hooks/useInterval';
 import { authFilesApi } from '@/services/api/authFiles';
-import { useNotificationStore } from '@/stores/useNotificationStore';
-import { useUsageStatsStore } from '@/stores/useUsageStatsStore';
 import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@/types';
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
@@ -28,9 +25,11 @@ import {
   formatDurationMs,
   normalizeAuthIndex,
   type UsageThinking,
+  type ModelPrice,
 } from '@/utils/usage';
 import { downloadBlob } from '@/utils/download';
 import { monitorKeyLabel } from '@/utils/monitorAnalytics';
+import { estimateRequestCost, formatRequestCost, requestUpstreamTransport } from '@/utils/requestPresentation';
 import styles from '@/pages/UsagePage.module.scss';
 
 const ALL_FILTER = '__all__';
@@ -40,7 +39,9 @@ const EVENTS_PAGE_SIZE = 50;
 
 type RequestEventRow = {
   id: string;
-  backendId: string | null;
+  estimatedCost: number | null;
+  executorType: string;
+  upstreamTransport: 'HTTP' | 'WS' | null;
   timestamp: string;
   timestampMs: number;
   timestampLabel: string;
@@ -72,6 +73,7 @@ type RequestEventRow = {
 
 export interface RequestEventsDetailsCardProps {
   usage: unknown;
+  modelPrices: Record<string, ModelPrice>;
   loading: boolean;
   geminiKeys: GeminiKeyConfig[];
   claudeConfigs: ProviderKeyConfig[];
@@ -188,6 +190,7 @@ const encodeCsv = (value: string | number): string => {
 
 export function RequestEventsDetailsCard({
   usage,
+  modelPrices,
   loading,
   geminiKeys,
   claudeConfigs,
@@ -200,8 +203,6 @@ export function RequestEventsDetailsCard({
   fixedHeight = false,
 }: RequestEventsDetailsCardProps) {
   const { t, i18n } = useTranslation();
-  const { showConfirmation, showNotification } = useNotificationStore();
-  const deleteUsageRecords = useUsageStatsStore((state) => state.deleteUsageRecords);
 
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
   const [apiKeyFilter, setApiKeyFilter] = useState(ALL_FILTER);
@@ -214,7 +215,6 @@ export function RequestEventsDetailsCard({
   );
   const [localAuthFiles, setLocalAuthFiles] = useState<AuthFileItem[]>([]);
   const [selectedFailureRow, setSelectedFailureRow] = useState<RequestEventRow | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [nextRefreshAtMs, setNextRefreshAtMs] = useState<number | null>(null);
   const [countdownNowMs, setCountdownNowMs] = useState(() => Date.now());
 
@@ -402,7 +402,9 @@ export function RequestEventsDetailsCard({
 
       return {
         id: backendId ?? `${timestamp}-${model}-${sourceKey}-${authIndex}-${index}`,
-        backendId,
+        estimatedCost: estimateRequestCost(detail, modelPrices),
+        executorType: detail.executor_type ?? '',
+        upstreamTransport: requestUpstreamTransport(detail.executor_type),
         timestamp,
         timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
         timestampLabel: date ? date.toLocaleString(i18n.language) : timestamp || '-',
@@ -467,7 +469,7 @@ export function RequestEventsDetailsCard({
         source: buildDisambiguatedSourceLabel(row),
       }))
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, sourceInfoMap, usage]);
+  }, [authFileMap, i18n.language, sourceInfoMap, usage, modelPrices]);
 
   const hasTimingData = useMemo(
     () => rows.some((row) => row.firstByteLatencyMs !== null || row.generationMs !== null),
@@ -617,6 +619,9 @@ export function RequestEventsDetailsCard({
       'total_tokens',
       'context_tokens',
       'cache_hit_ratio',
+      'estimated_cost_usd',
+      'upstream_transport',
+      'executor_type',
     ];
 
     const csvRows = filteredRows.map((row) =>
@@ -644,6 +649,9 @@ export function RequestEventsDetailsCard({
         row.totalTokens,
         row.contextTokens,
         row.cacheHitRatio !== null ? row.cacheHitRatio.toFixed(4) : '',
+        row.estimatedCost ?? '',
+        row.upstreamTransport ?? '',
+        row.executorType,
       ]
         .map((value) => encodeCsv(value))
         .join(',')
@@ -687,6 +695,9 @@ export function RequestEventsDetailsCard({
         total_tokens: row.totalTokens,
       },
       context_tokens: row.contextTokens,
+      estimated_cost_usd: row.estimatedCost,
+      upstream_transport: row.upstreamTransport,
+      executor_type: row.executorType || null,
       ...(row.cacheHitRatio !== null ? { cache_hit_ratio: row.cacheHitRatio } : {}),
     }));
 
@@ -697,36 +708,6 @@ export function RequestEventsDetailsCard({
       blob: new Blob([content], { type: 'application/json;charset=utf-8' }),
     });
   };
-
-  const handleDeleteRow = useCallback(
-    (row: RequestEventRow) => {
-      const backendId = row.backendId;
-      if (!backendId) return;
-      showConfirmation({
-        title: t('usage_stats.request_events_delete_title'),
-        message: t('usage_stats.request_events_delete_confirm'),
-        confirmText: t('common.confirm'),
-        variant: 'danger',
-        onConfirm: async () => {
-          setDeletingId(backendId);
-          try {
-            await deleteUsageRecords([backendId]);
-            showNotification(t('usage_stats.request_events_delete_success'), 'success');
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : '';
-            showNotification(
-              `${t('usage_stats.request_events_delete_failed')}${message ? `: ${message}` : ''}`,
-              'error'
-            );
-            throw err;
-          } finally {
-            setDeletingId(null);
-          }
-        },
-      });
-    },
-    [deleteUsageRecords, showConfirmation, showNotification, t]
-  );
 
   const handleCloseFailureModal = useCallback(() => {
     setSelectedFailureRow(null);
@@ -899,69 +880,70 @@ export function RequestEventsDetailsCard({
           <div className={styles.requestEventsTableWrapper}>
             <table className={`${styles.table} ${styles.requestEventsTable}`}>
               <colgroup>
-                <col className={styles.requestEventsActionCol} />
                 <col className={styles.requestEventsTimestampCol} />
                 <col className={styles.requestEventsModelCol} />
                 <col className={styles.requestEventsKeyCol} />
                 <col className={styles.requestEventsTokenSummaryCol} />
-                <col className={styles.requestEventsSourceCol} />
                 <col className={styles.requestEventsTierCol} />
+                <col className={styles.requestEventsCostCol} />
+                <col className={styles.requestEventsSourceCol} />
                 <col className={styles.requestEventsResultCol} />
-                {hasTimingData && <col className={styles.requestEventsTimingCol} />}
-                {hasTimingData && <col className={styles.requestEventsTimingCol} />}
-                {hasTimingData && <col className={styles.requestEventsTimingCol} />}
-                <col className={styles.requestEventsThinkingCol} />
+                <col className={styles.requestEventsTimingCol} />
               </colgroup>
               <thead>
                 <tr>
-                  <th aria-label={t('usage_stats.request_events_delete_action')} />
                   <th>{t('usage_stats.request_events_timestamp')}</th>
                   <th>{t('usage_stats.model_name')}</th>
                   <th>{t('monitor_custom.apiKey')}</th>
                   <th>{t('monitor_custom.token_column')}</th>
+                  <th>{t('monitor_custom.tier_thinking')}</th>
+                  <th title={t('monitor_custom.cost_hint')}>{t('monitor_custom.request_cost')}</th>
                   <th>{t('usage_stats.request_events_source')}</th>
-                  <th>{t('usage_stats.request_events_tier')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
-                  {hasTimingData && <th>{t('usage_stats.first_byte_latency')}</th>}
-                  {hasTimingData && <th>{t('usage_stats.generation_time')}</th>}
-                  {hasTimingData && <th>{t('usage_stats.request_events_tps')}</th>}
-                  <th>{t('usage_stats.thinking_intensity')}</th>
+                  <th>{t('monitor_custom.timing_column')}</th>
                 </tr>
               </thead>
               <tbody>
                 {renderedRows.map((row) => (
                   <tr key={row.id}>
-                    <td className={styles.requestEventsDeleteCell}>
-                      <button
-                        type="button"
-                        className={styles.requestEventsDeleteButton}
-                        onClick={() => handleDeleteRow(row)}
-                        disabled={!row.backendId || deletingId === row.backendId}
-                        title={t('usage_stats.request_events_delete_action')}
-                        aria-label={t('usage_stats.request_events_delete_action')}
-                      >
-                        <IconMinus size={14} />
-                      </button>
-                    </td>
                     <td title={row.timestamp} className={styles.requestEventsTimestamp}>
                       {row.timestampLabel}
                     </td>
-                    <td className={styles.modelCell}>{row.model}</td>
+                    <td className={styles.modelCell}>
+                      <div className={styles.requestEventsStack}>
+                        <span>{row.model}</span>
+                        <small title={`${t('monitor_custom.transport_hint')}${row.executorType ? ` (${row.executorType})` : ''}`}>
+                          {t('monitor_custom.upstream_transport')}: {row.upstreamTransport ?? t('monitor_custom.not_recorded')}
+                        </small>
+                      </div>
+                    </td>
                     <td title={monitorKeyLabel(row.apiKey)}>{monitorKeyLabel(row.apiKey)}</td>
                     <td>
                       <RequestTokenCell metrics={row} />
+                    </td>
+                    <td>
+                      <div className={styles.requestEventsStack}>
+                        <span className={row.serviceTier ? styles.requestEventsTierBadge : styles.requestEventsTierEmpty}>
+                          {row.serviceTier || '--'}
+                        </span>
+                        <span
+                          className={row.thinkingLabel !== '-' ? styles.requestEventsThinkingBadge : styles.requestEventsThinkingEmpty}
+                          title={row.thinking ? [row.thinking.mode, row.thinking.level, row.thinking.budget].filter((value) => value !== undefined).join(' · ') : t('usage_stats.thinking_intensity')}
+                        >
+                          {row.thinkingLabel}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className={styles.requestEventsStack} title={t('monitor_custom.cost_hint')}>
+                        <span className={styles.requestEventsCostValue}>{formatRequestCost(row.estimatedCost)}</span>
+                        <small>{t(row.estimatedCost === null ? 'monitor_custom.price_missing' : 'monitor_custom.cost_estimated')}</small>
+                      </div>
                     </td>
                     <td className={styles.requestEventsSourceCell} title={row.source}>
                       <span>{row.source}</span>
                       {row.sourceType && (
                         <span className={styles.credentialType}>{row.sourceType}</span>
-                      )}
-                    </td>
-                    <td>
-                      {row.serviceTier ? (
-                        <span className={styles.requestEventsTierBadge}>{row.serviceTier}</span>
-                      ) : (
-                        <span className={styles.requestEventsTierEmpty}>--</span>
                       )}
                     </td>
                     <td>
@@ -980,42 +962,12 @@ export function RequestEventsDetailsCard({
                         </span>
                       )}
                     </td>
-                    {hasTimingData && (
-                      <td className={styles.durationCell}>
-                        {formatDurationMs(row.firstByteLatencyMs)}
-                      </td>
-                    )}
-                    {hasTimingData && (
-                      <td className={styles.durationCell}>{formatDurationMs(row.generationMs)}</td>
-                    )}
-                    {hasTimingData && <td>{row.tps !== null ? row.tps.toFixed(2) : '--'}</td>}
                     <td>
-                      <span
-                        className={
-                          row.thinkingLabel !== '-'
-                            ? styles.requestEventsThinkingBadge
-                            : styles.requestEventsThinkingEmpty
-                        }
-                        title={
-                          row.thinking
-                            ? [
-                                row.thinking.mode
-                                  ? `${t('usage_stats.thinking_mode')}: ${row.thinking.mode}`
-                                  : '',
-                                row.thinking.level
-                                  ? `${t('usage_stats.thinking_level')}: ${row.thinking.level}`
-                                  : '',
-                                typeof row.thinking.budget === 'number'
-                                  ? `${t('usage_stats.thinking_budget')}: ${row.thinking.budget.toLocaleString()}`
-                                  : '',
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')
-                            : undefined
-                        }
-                      >
-                        {row.thinkingLabel}
-                      </span>
+                      <div className={`${styles.requestEventsStack} ${styles.requestEventsTiming}`}>
+                        <span><small>{t('monitor_custom.ttft_short')}</small> {formatDurationMs(row.firstByteLatencyMs)}</span>
+                        <span><small>{t('monitor_custom.generation_short')}</small> {formatDurationMs(row.generationMs)}</span>
+                        <span><small>TPS</small> {row.tps !== null ? row.tps.toFixed(2) : '--'}</span>
+                      </div>
                     </td>
                   </tr>
                 ))}

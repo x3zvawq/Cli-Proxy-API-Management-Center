@@ -105,6 +105,7 @@ export interface UsageDetail {
   thinking?: UsageThinking | null;
   reasoning_effort?: string;
   provider?: string;
+  executor_type?: string;
   service_tier?: string;
   failed: boolean;
   failure_status_code?: number;
@@ -329,13 +330,15 @@ const normalizeFailBody = (value: unknown): string | undefined => {
  */
 const extractUsageStatusFields = (
   detail: Record<string, unknown>
-): Pick<UsageDetail, 'provider' | 'service_tier' | 'failure_status_code' | 'failure_body'> => {
+): Pick<UsageDetail, 'provider' | 'executor_type' | 'service_tier' | 'failure_status_code' | 'failure_body'> => {
   const provider = normalizeProvider(detail.provider);
+  const executorType = typeof detail.executor_type === 'string' ? detail.executor_type.trim() : '';
   const serviceTier = normalizeServiceTier(detail.service_tier ?? detail.serviceTier);
   const failStatusCode = normalizeFailStatusCode(detail.failure_status_code ?? detail.fail_status_code);
   const failBody = normalizeFailBody(detail.failure_body ?? detail.fail_body);
   return {
     ...(provider ? { provider } : {}),
+    ...(executorType ? { executor_type: executorType } : {}),
     ...(serviceTier ? { service_tier: serviceTier } : {}),
     ...(failStatusCode !== undefined ? { failure_status_code: failStatusCode } : {}),
     ...(failBody !== undefined ? { failure_body: failBody } : {}),

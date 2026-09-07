@@ -1,5 +1,16 @@
 {
   "monitor_custom": {
+    "tier_thinking": "Tier / 思考",
+    "request_cost": "估算费用 (USD)",
+    "cost_estimated": "按配置单价",
+    "price_missing": "未配置价格",
+    "cost_hint": "按本浏览器的模型单价、上下文阶梯及 Tier 倍率估算：纯输入 + 缓存读取 + 缓存写入 + 输出；思考不重复计费。非上游账单扣款，缺失用量无法估计；请在价格设置中同步标准价格或手动填写。",
+    "timing_column": "首字 / 生成 / TPS",
+    "ttft_short": "首字",
+    "generation_short": "生成",
+    "upstream_transport": "上游",
+    "not_recorded": "未记录",
+    "transport_hint": "依据实际记录的执行器区分上游 HTTP / WS。不是下游连接方式；插件未保存 stream 字段，无法区分 HTTP 流式与非流式。失败记录表示尝试的上游路径，不代表连接成功。",
     "token_column": "Token（↑ 输入 / ↓ 输出）",
     "token_details": "Token 详情",
     "context": "输入上下文总量",

@@ -1,5 +1,16 @@
 {
   "monitor_custom": {
+    "tier_thinking": "Tier / 思考",
+    "request_cost": "估算費用 (USD)",
+    "cost_estimated": "按設定單價",
+    "price_missing": "未設定價格",
+    "cost_hint": "依本瀏覽器的模型單價、上下文階梯及 Tier 倍率估算：純輸入 + 快取讀取 + 快取寫入 + 輸出；思考不重複計費。非上游帳單扣款，缺少用量無法估計；請在價格設定中同步標準價格或手動填寫。",
+    "timing_column": "首字 / 生成 / TPS",
+    "ttft_short": "首字",
+    "generation_short": "生成",
+    "upstream_transport": "上游",
+    "not_recorded": "未記錄",
+    "transport_hint": "依記錄的執行器區分上游 HTTP / WS，並非下游連線方式。插件未儲存 stream 欄位，無法區分 HTTP 串流與非串流。失敗記錄表示嘗試的上游路徑，不代表連線成功。",
     "token_column": "Token（↑ 輸入 / ↓ 輸出）",
     "token_details": "Token 詳情",
     "context": "輸入上下文總量",
