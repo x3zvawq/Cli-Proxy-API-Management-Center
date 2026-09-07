@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { USAGE_STATS_STALE_TIME_MS, useUsageStatsStore } from '@/stores/useUsageStatsStore';
-import { loadModelPrices, saveModelPrices, type ModelPrice, type UsageTimeRange } from '@/utils/usage';
+import {
+  loadModelPrices,
+  saveModelPrices,
+  type ModelPrice,
+  type UsageTimeRange,
+} from '@/utils/usage';
 
 export interface UsagePayload {
   total_requests?: number;
@@ -12,6 +17,7 @@ export interface UsagePayload {
 }
 
 export interface UseUsageDataOptions {
+  dateRange?: { startMs: number; endMs: number };
   timeRange?: UsageTimeRange;
   minimumLookbackMs?: number;
   refreshFullRange?: boolean;
@@ -29,13 +35,17 @@ export interface UseUsageDataReturn {
 
 export function useUsageData(options: UseUsageDataOptions = {}): UseUsageDataReturn {
   const { timeRange, minimumLookbackMs, refreshFullRange = false } = options;
+  const startMs = options.dateRange?.startMs;
+  const endMs = options.dateRange?.endMs;
   const usageSnapshot = useUsageStatsStore((state) => state.usage);
   const loading = useUsageStatsStore((state) => state.loading);
   const storeError = useUsageStatsStore((state) => state.error);
   const lastRefreshedAtTs = useUsageStatsStore((state) => state.lastRefreshedAt);
   const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
 
-  const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>(() => loadModelPrices());
+  const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>(() =>
+    loadModelPrices()
+  );
 
   const loadUsage = useCallback(async () => {
     await loadUsageStats({
@@ -44,8 +54,9 @@ export function useUsageData(options: UseUsageDataOptions = {}): UseUsageDataRet
       staleTimeMs: USAGE_STATS_STALE_TIME_MS,
       timeRange,
       minimumLookbackMs,
+      dateRange: startMs !== undefined && endMs !== undefined ? { startMs, endMs } : undefined,
     });
-  }, [loadUsageStats, minimumLookbackMs, refreshFullRange, timeRange]);
+  }, [loadUsageStats, minimumLookbackMs, refreshFullRange, timeRange, startMs, endMs]);
 
   useEffect(() => {
     void loadUsageStats({
@@ -54,8 +65,9 @@ export function useUsageData(options: UseUsageDataOptions = {}): UseUsageDataRet
       staleTimeMs: USAGE_STATS_STALE_TIME_MS,
       timeRange,
       minimumLookbackMs,
+      dateRange: startMs !== undefined && endMs !== undefined ? { startMs, endMs } : undefined,
     }).catch(() => {});
-  }, [loadUsageStats, minimumLookbackMs, timeRange]);
+  }, [loadUsageStats, minimumLookbackMs, timeRange, startMs, endMs]);
 
   const handleSetModelPrices = useCallback((prices: Record<string, ModelPrice>) => {
     setModelPrices(prices);

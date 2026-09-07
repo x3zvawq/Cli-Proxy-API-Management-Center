@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api/authFiles';
 import type { AuthFileItem } from '@/types/authFile';
+import type { CredentialInfo } from '@/types/sourceInfo';
+import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import {
   ArcElement,
   BarController,
@@ -15,9 +17,11 @@ import {
   LinearScale,
   PointElement,
   Title,
-  Tooltip
+  Tooltip,
 } from 'chart.js';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
@@ -28,24 +32,35 @@ import {
   RequestEventsDetailsCard,
   useSparklines,
   useUsageData,
-  type UsagePayload
+  type UsagePayload,
 } from '@/components/usage';
 import type { ModelStat } from '@/components/usage/ModelStatsCard';
 import { MonitorStatCards } from '@/components/monitor/MonitorStatCards';
 import { MonitorTrendChart } from '@/components/monitor/MonitorTrendChart';
 import { ModelUsageDistributionCard } from '@/components/monitor/ModelUsageDistributionCard';
 import { MonitorApiKeyStatsCard } from '@/components/monitor/MonitorApiKeyStatsCard';
+import { MonitorBreakdown } from '@/components/monitor/MonitorBreakdown';
+import {
+  EMPTY_MONITOR_FILTERS,
+  filterMonitorUsage,
+  monitorKeyLabel,
+  parseMonitorRange,
+  toLocalDateTime,
+  type MonitorDateRange,
+} from '@/utils/monitorAnalytics';
 import {
   filterUsageByTimeRange,
+  collectUsageDetailsWithEndpoint,
+  normalizeAuthIndex,
   getModelNamesFromUsage,
   getModelStats,
-  type UsageTimeRange
+  type UsageTimeRange,
 } from '@/utils/usage';
 import {
   DEFAULT_USAGE_TIME_RANGE,
   HOUR_WINDOW_BY_USAGE_TIME_RANGE,
   USAGE_TIME_RANGE_OPTIONS,
-  isUsageTimeRange
+  isUsageTimeRange,
 } from '@/utils/usageTimeRange';
 import styles from './MonitoringCenterPage.module.scss';
 
@@ -85,17 +100,16 @@ export function MonitoringCenterPage() {
   const isDark = resolvedTheme === 'dark';
   const config = useConfigStore((state) => state.config);
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
+  const [customRange, setCustomRange] = useState<MonitorDateRange>();
+  const [showCustomRange, setShowCustomRange] = useState(false);
+  const [startDraft, setStartDraft] = useState(() => toLocalDateTime(Date.now() - 86_400_000));
+  const [endDraft, setEndDraft] = useState(() => toLocalDateTime(Date.now()));
+  const [rangeError, setRangeError] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_MONITOR_FILTERS);
   const [usageStatsDimension, setUsageStatsDimension] = useState<'model' | 'apiKey'>('model');
 
-  const {
-    usage,
-    loading,
-    error,
-    lastRefreshedAt,
-    modelPrices,
-    setModelPrices,
-    loadUsage,
-  } = useUsageData({ timeRange });
+  const { usage, loading, error, lastRefreshedAt, modelPrices, setModelPrices, loadUsage } =
+    useUsageData({ timeRange, dateRange: customRange });
   const [authFiles, setAuthFiles] = useState<AuthFileItem[]>([]);
 
   const loadAuthFiles = useCallback(async () => {
@@ -129,10 +143,52 @@ export function MonitoringCenterPage() {
     }
   }, [timeRange]);
 
-  const filteredUsage = useMemo(
-    () => (usage ? filterUsageByTimeRange(usage, timeRange) : null),
-    [usage, timeRange]
+  const timeFilteredUsage = useMemo(
+    () =>
+      usage
+        ? customRange
+          ? filterMonitorUsage(usage, EMPTY_MONITOR_FILTERS, customRange)
+          : filterUsageByTimeRange(usage, timeRange)
+        : null,
+    [usage, timeRange, customRange]
   );
+  const filteredUsage = useMemo(
+    () => (timeFilteredUsage ? filterMonitorUsage(timeFilteredUsage, filters) : null),
+    [timeFilteredUsage, filters]
+  );
+  const availableDetails = useMemo(
+    () => collectUsageDetailsWithEndpoint(timeFilteredUsage),
+    [timeFilteredUsage]
+  );
+  const dimensionOptions = useMemo(
+    () => ({
+      apiKey: [...new Set(availableDetails.map((d) => d.__endpoint))].sort(),
+      model: [...new Set(availableDetails.map((d) => d.__modelName || 'unknown'))].sort(),
+      source: [...new Set(availableDetails.map((d) => d.source))].sort(),
+    }),
+    [availableDetails]
+  );
+  const sourceLabels = useMemo(() => {
+    const sources = buildSourceInfoMap({
+      geminiApiKeys: config?.geminiApiKeys,
+      claudeApiKeys: config?.claudeApiKeys,
+      codexApiKeys: config?.codexApiKeys,
+      vertexApiKeys: config?.vertexApiKeys,
+      openaiCompatibility: config?.openaiCompatibility,
+    });
+    const files = new Map<string, CredentialInfo>();
+    authFiles.forEach((file) => {
+      const key = normalizeAuthIndex(file.auth_index ?? file.authIndex);
+      if (key)
+        files.set(key, { name: file.name || key, type: String(file.type || file.provider || '') });
+    });
+    return new Map(
+      availableDetails.map((d) => [
+        d.source,
+        resolveSourceDisplay(d.source, d.auth_index, sources, files).displayName,
+      ])
+    );
+  }, [availableDetails, authFiles, config]);
   const hourWindowHours =
     timeRange === 'all' ? undefined : HOUR_WINDOW_BY_USAGE_TIME_RANGE[timeRange];
   const rateWindowMinutes = useMemo(() => {
@@ -143,22 +199,39 @@ export function MonitoringCenterPage() {
     return 30;
   }, [timeRange]);
   const nowMs = lastRefreshedAt?.getTime() ?? 0;
+  const chartRange =
+    customRange ??
+    (hourWindowHours && nowMs
+      ? { startMs: nowMs - hourWindowHours * 3_600_000, endMs: nowMs }
+      : undefined);
 
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
     useSparklines({
-      usage: filteredUsage as UsagePayload | null,
+      usage: customRange ? null : (filteredUsage as UsagePayload | null),
       loading,
       nowMs,
       timeRange,
-      modelPrices
+      modelPrices,
     });
 
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
-  const modelStats = useMemo<ModelStat[]>(() => getModelStats(filteredUsage, modelPrices), [filteredUsage, modelPrices]);
+  const modelStats = useMemo<ModelStat[]>(
+    () => getModelStats(filteredUsage, modelPrices),
+    [filteredUsage, modelPrices]
+  );
 
   const handleTimeRangeChange = useCallback((range: UsageTimeRange) => {
     setTimeRange(range);
+    setCustomRange(undefined);
+    setShowCustomRange(false);
+    setRangeError(false);
   }, []);
+
+  const applyCustomRange = () => {
+    const next = parseMonitorRange(startDraft, endDraft);
+    setRangeError(!next);
+    if (next) setCustomRange(next);
+  };
 
   const usageStatsToggle = (
     <div className={styles.periodButtons}>
@@ -197,13 +270,20 @@ export function MonitoringCenterPage() {
             {USAGE_TIME_RANGE_OPTIONS.map((option) => (
               <Button
                 key={option.value}
-                variant={timeRange === option.value ? 'primary' : 'secondary'}
+                variant={!customRange && timeRange === option.value ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => handleTimeRangeChange(option.value)}
               >
                 {t(option.labelKey)}
               </Button>
             ))}
+            <Button
+              variant={customRange ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setShowCustomRange(!showCustomRange)}
+            >
+              {t('monitor_custom.custom_range')}
+            </Button>
           </div>
           <Button
             variant="secondary"
@@ -223,20 +303,108 @@ export function MonitoringCenterPage() {
 
       {error && <div className={styles.errorBox}>{error}</div>}
 
+      <section className={styles.filterPanel} aria-label={t('monitor_custom.filters')}>
+        {showCustomRange && (
+          <div className={styles.filterRow}>
+            <Input
+              type="datetime-local"
+              label={t('monitor_custom.start')}
+              value={startDraft}
+              onChange={(e) => setStartDraft(e.target.value)}
+            />
+            <Input
+              type="datetime-local"
+              label={t('monitor_custom.end')}
+              value={endDraft}
+              onChange={(e) => setEndDraft(e.target.value)}
+            />
+            <Button size="sm" onClick={applyCustomRange} disabled={loading}>
+              {t('monitor_custom.apply')}
+            </Button>
+          </div>
+        )}
+        {rangeError && (
+          <div role="alert" className={styles.errorBox}>
+            {t('monitor_custom.invalid_range')}
+          </div>
+        )}
+        <p className={styles.cardHint}>
+          {t('monitor_custom.range_hint', {
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          })}
+        </p>
+        {customRange && (
+          <p className={styles.cardHint}>
+            {t('monitor_custom.active_range')}: {new Date(customRange.startMs).toLocaleString()} →{' '}
+            {new Date(customRange.endMs).toLocaleString()}
+          </p>
+        )}
+        <div className={styles.filterRow}>
+          {(['apiKey', 'model', 'source'] as const).map((field) => (
+            <div key={field} className={styles.filterItem}>
+              <span className={styles.requestEventsFilterLabel}>
+                {t(`monitor_custom.${field}`)}
+              </span>
+              <Select
+                ariaLabel={t(`monitor_custom.${field}`)}
+                value={filters[field]}
+                onChange={(value) => setFilters({ ...filters, [field]: value })}
+                options={[
+                  { value: '', label: t('usage_stats.filter_all') },
+                  ...[
+                    ...new Set([
+                      ...dimensionOptions[field],
+                      ...(filters[field] ? [filters[field]] : []),
+                    ]),
+                  ].map((value) => ({
+                    value,
+                    label:
+                      field === 'apiKey'
+                        ? monitorKeyLabel(value)
+                        : field === 'source'
+                          ? sourceLabels.get(value) || value
+                          : value,
+                  })),
+                ]}
+              />
+            </div>
+          ))}
+          <div className={styles.filterItem}>
+            <span className={styles.requestEventsFilterLabel}>{t('monitor_custom.result')}</span>
+            <Select
+              ariaLabel={t('monitor_custom.result')}
+              value={filters.result}
+              onChange={(value) => setFilters({ ...filters, result: value })}
+              options={[
+                { value: '', label: t('usage_stats.filter_all') },
+                { value: 'success', label: t('stats.success') },
+                { value: 'failure', label: t('stats.failure') },
+              ]}
+            />
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => setFilters(EMPTY_MONITOR_FILTERS)}>
+            {t('monitor_custom.reset')}
+          </Button>
+        </div>
+        <p className={styles.cardHint}>{t('monitor_custom.filter_hint')}</p>
+      </section>
+
       <MonitorStatCards
         usage={filteredUsage as UsagePayload | null}
         loading={loading}
         modelPrices={modelPrices}
         rateWindowMinutes={rateWindowMinutes}
+        dateRange={customRange}
         timeRange={timeRange}
         sparklines={{
           requests: requestsSparkline,
           tokens: tokensSparkline,
           rpm: rpmSparkline,
           tpm: tpmSparkline,
-          cost: costSparkline
+          cost: costSparkline,
         }}
       />
+      <MonitorBreakdown usage={filteredUsage} loading={loading} />
 
       <div className={styles.topGrid}>
         <MonitorTrendChart
@@ -244,14 +412,10 @@ export function MonitoringCenterPage() {
           loading={loading}
           isDark={isDark}
           isMobile={isMobile}
-          hourWindowHours={hourWindowHours}
+          dateRange={chartRange}
           modelPrices={modelPrices}
         />
-        <ModelUsageDistributionCard
-          modelStats={modelStats}
-          loading={loading}
-          isDark={isDark}
-        />
+        <ModelUsageDistributionCard modelStats={modelStats} loading={loading} isDark={isDark} />
       </div>
 
       <div className={styles.middleGrid}>
@@ -289,7 +453,6 @@ export function MonitoringCenterPage() {
           vertexConfigs={config?.vertexApiKeys || []}
           openaiProviders={config?.openaiCompatibility || []}
           authFiles={authFiles}
-          fixedHeight
           onRefresh={handleRefresh}
           lastRefreshedAt={lastRefreshedAt}
         />

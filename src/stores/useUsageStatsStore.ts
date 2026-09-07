@@ -26,6 +26,7 @@ const USAGE_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
 };
 
 export type LoadUsageStatsOptions = {
+  dateRange?: { startMs: number; endMs: number };
   force?: boolean;
   fullRange?: boolean;
   staleTimeMs?: number;
@@ -57,7 +58,12 @@ type UsageStatsState = {
 const createEmptyKeyStats = (): KeyStats => ({ bySource: {}, byAuthIndex: {} });
 
 let usageRequestToken = 0;
-let inFlightUsageRequest: { id: number; scopeKey: string; requestKey: string; promise: Promise<void> } | null = null;
+let inFlightUsageRequest: {
+  id: number;
+  scopeKey: string;
+  requestKey: string;
+  promise: Promise<void>;
+} | null = null;
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error
@@ -86,7 +92,9 @@ const getTargetStartMs = (
 
   const rangeStartMs = getRangeStartMs(timeRange, nowMs);
   const minimumStartMs =
-    typeof minimumLookbackMs === 'number' && Number.isFinite(minimumLookbackMs) && minimumLookbackMs > 0
+    typeof minimumLookbackMs === 'number' &&
+    Number.isFinite(minimumLookbackMs) &&
+    minimumLookbackMs > 0
       ? nowMs - minimumLookbackMs
       : null;
 
@@ -244,10 +252,22 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
 
   loadUsageStats: async (options = {}) => {
     const force = options.force === true;
-    const fullRange = options.fullRange === true;
+    // Historical queries replace the cache: the incremental path follows the live clock.
+    const fullRange = options.fullRange === true || Boolean(options.dateRange);
     const staleTimeMs = options.staleTimeMs ?? USAGE_STATS_STALE_TIME_MS;
     const nowMs = Date.now();
-    const targetStartMs = getTargetStartMs(options.timeRange, nowMs, options.minimumLookbackMs);
+    const targetStartMs =
+      options.dateRange?.startMs ??
+      getTargetStartMs(options.timeRange, nowMs, options.minimumLookbackMs);
+    const targetEndMs = options.dateRange?.endMs ?? nowMs;
+    if (
+      options.dateRange &&
+      (!Number.isFinite(targetStartMs) ||
+        !Number.isFinite(targetEndMs) ||
+        targetStartMs! >= targetEndMs)
+    ) {
+      throw new Error('Invalid usage date range');
+    }
     const { apiBase = '', managementKey = '' } = useAuthStore.getState();
     const scopeKey = `${apiBase}::${managementKey}`;
     const state = get();
@@ -279,7 +299,7 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
 
     const requestState = scopeChanged ? get() : state;
     const requestRanges = fullRange
-      ? [{ startMs: targetStartMs, endMs: nowMs }]
+      ? [{ startMs: targetStartMs, endMs: targetEndMs }]
       : resolveRequestRanges(requestState, targetStartMs, nowMs, force, fresh);
 
     if (!requestRanges.length) {
@@ -291,7 +311,11 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
       .map((range) => `${range.startMs ?? 'all'}-${range.endMs}`)
       .join(',')}`;
 
-    if (inFlightUsageRequest && inFlightUsageRequest.scopeKey === scopeKey && inFlightUsageRequest.requestKey === requestKey) {
+    if (
+      inFlightUsageRequest &&
+      inFlightUsageRequest.scopeKey === scopeKey &&
+      inFlightUsageRequest.requestKey === requestKey
+    ) {
       await inFlightUsageRequest.promise;
       return;
     }
@@ -342,7 +366,7 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
           error: message,
           scopeKey,
         });
-        throw new Error(message);
+        throw Object.assign(new Error(message), { cause: error });
       } finally {
         if (inFlightUsageRequest?.id === requestId) {
           inFlightUsageRequest = null;
@@ -363,7 +387,9 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
     set((state) => {
       const idSet = new Set(uniqueIds);
       const usageDetailsByKey = Object.fromEntries(
-        Object.entries(state.usageDetailsByKey).filter(([, detail]) => !detail.id || !idSet.has(detail.id))
+        Object.entries(state.usageDetailsByKey).filter(
+          ([, detail]) => !detail.id || !idSet.has(detail.id)
+        )
       ) as Record<string, UsageDetailWithEndpoint>;
       const deletedUsageIds = { ...state.deletedUsageIds };
       uniqueIds.forEach((id) => {

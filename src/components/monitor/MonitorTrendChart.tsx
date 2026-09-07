@@ -4,8 +4,8 @@ import { Chart } from 'react-chartjs-2';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { buildUsageTotalsTrend, formatUsdFixedOne, type ModelPrice } from '@/utils/usage';
-import { getHourChartMinWidth } from '@/utils/usage/chartConfig';
+import { collectUsageDetailsWithEndpoint, formatUsd, type ModelPrice } from '@/utils/usage';
+import { buildMonitorTrend, type MonitorDateRange } from '@/utils/monitorAnalytics';
 import type { UsagePayload } from '@/components/usage';
 import styles from '@/pages/MonitoringCenterPage.module.scss';
 
@@ -14,7 +14,7 @@ export interface MonitorTrendChartProps {
   loading: boolean;
   isDark: boolean;
   isMobile: boolean;
-  hourWindowHours?: number;
+  dateRange?: MonitorDateRange;
   modelPrices: Record<string, ModelPrice>;
 }
 
@@ -22,7 +22,7 @@ const TOKEN_AXIS_UNITS = [
   { value: 1_000_000_000_000, suffix: 'T' },
   { value: 1_000_000_000, suffix: 'B' },
   { value: 1_000_000, suffix: 'M' },
-  { value: 1_000, suffix: 'K' }
+  { value: 1_000, suffix: 'K' },
 ];
 
 const getTokenAxisUnit = (tickValues: number[]) => {
@@ -32,12 +32,15 @@ const getTokenAxisUnit = (tickValues: number[]) => {
     .filter((value) => value > 0)
     .sort((a, b) => a - b);
 
-  const smallestStep = positive.reduce<number | null>((step, value, index) => {
-    if (index === 0) return step;
-    const diff = value - positive[index - 1];
-    if (diff <= 0) return step;
-    return step === null ? diff : Math.min(step, diff);
-  }, null) ?? positive[0] ?? 0;
+  const smallestStep =
+    positive.reduce<number | null>((step, value, index) => {
+      if (index === 0) return step;
+      const diff = value - positive[index - 1];
+      if (diff <= 0) return step;
+      return step === null ? diff : Math.min(step, diff);
+    }, null) ??
+    positive[0] ??
+    0;
 
   return TOKEN_AXIS_UNITS.find((unit) => smallestStep >= unit.value) ?? null;
 };
@@ -61,43 +64,53 @@ const formatTokenAxisValue = (value: number, ticks: { value: number | string }[]
   const fractionDigits = Number.isInteger(scaled) ? 0 : absScaled >= 10 ? 1 : 2;
   return `${scaled.toLocaleString(undefined, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: fractionDigits
+    maximumFractionDigits: fractionDigits,
   })}${unit.suffix}`;
 };
 
-const formatCostValue = (value: number) => formatUsdFixedOne(value);
+const formatCostValue = (value: number) => formatUsd(value);
 
 export function MonitorTrendChart({
   usage,
   loading,
   isDark,
   isMobile,
-  hourWindowHours,
-  modelPrices
+  dateRange,
+  modelPrices,
 }: MonitorTrendChartProps) {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('day');
-
-  const trend = useMemo(
-    () => buildUsageTotalsTrend(usage, modelPrices, period, { hourWindowHours }),
-    [usage, modelPrices, period, hourWindowHours]
+  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
+  const [metric, setMetric] = useState<'tokens' | 'requests'>('tokens');
+  const hasPrices = useMemo(
+    () =>
+      collectUsageDetailsWithEndpoint(usage).some((detail) =>
+        Boolean(modelPrices[detail.__modelName || ''])
+      ),
+    [usage, modelPrices]
   );
 
-  const chartData = useMemo<ChartData<'bar' | 'line'>>(
+  const trend = useMemo(
+    () => buildMonitorTrend(usage, modelPrices, period, dateRange),
+    [usage, modelPrices, period, dateRange]
+  );
+
+  const chartData = useMemo<ChartData<'line'>>(
     () => ({
       labels: trend.labels,
       datasets: [
         {
-          type: 'bar' as const,
-          label: t('usage_stats.total_tokens'),
-          data: trend.tokenSeries,
+          type: 'line' as const,
+          label: t(metric === 'tokens' ? 'usage_stats.total_tokens' : 'usage_stats.total_requests'),
+          data: metric === 'tokens' ? trend.tokenSeries : trend.requestSeries,
           yAxisID: 'yTokens',
-          backgroundColor: 'rgba(139, 92, 246, 0.58)',
+          backgroundColor: 'rgba(139, 92, 246, 0.12)',
           borderColor: 'rgba(139, 92, 246, 0.9)',
-          borderWidth: 1,
-          borderRadius: 6,
-          maxBarThickness: period === 'hour' ? 18 : 28,
-          order: 2
+          borderWidth: 2,
+          cubicInterpolationMode: 'monotone',
+          fill: true,
+          pointRadius: trend.labels.length > 60 ? 0 : 2,
+          pointHoverRadius: 4,
+          order: 2,
         },
         {
           type: 'line' as const,
@@ -110,17 +123,19 @@ export function MonitorTrendChart({
           pointBorderColor: '#f59e0b',
           pointRadius: isMobile && period === 'hour' ? 0 : isMobile ? 2 : 3,
           pointHoverRadius: 4,
-          tension: 0.35,
+          cubicInterpolationMode: 'monotone',
           fill: false,
           borderWidth: isMobile ? 1.5 : 2,
-          order: 1
-        }
-      ]
+          order: 1,
+        },
+      ].filter(
+        (dataset) => dataset.yAxisID !== 'yCost' || hasPrices
+      ) as ChartData<'line'>['datasets'],
     }),
-    [isMobile, period, t, trend.costSeries, trend.labels, trend.tokenSeries]
+    [isMobile, period, t, trend, metric, hasPrices]
   );
 
-  const chartOptions = useMemo<ChartOptions<'bar'>>(() => {
+  const chartOptions = useMemo<ChartOptions<'line'>>(() => {
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(17, 24, 39, 0.06)';
     const axisBorderColor = isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(17, 24, 39, 0.10)';
     const tickColor = isDark ? 'rgba(255, 255, 255, 0.72)' : 'rgba(17, 24, 39, 0.72)';
@@ -136,7 +151,7 @@ export function MonitorTrendChart({
       maintainAspectRatio: false,
       interaction: {
         mode: 'index',
-        intersect: false
+        intersect: false,
       },
       plugins: {
         legend: { display: false },
@@ -157,18 +172,18 @@ export function MonitorTrendChart({
                 return `${label}: ${formatCostValue(value)}`;
               }
               return `${label}: ${value.toLocaleString()}`;
-            }
-          }
-        }
+            },
+          },
+        },
       },
       scales: {
         x: {
           grid: {
             color: gridColor,
-            drawTicks: false
+            drawTicks: false,
           },
           border: {
-            color: axisBorderColor
+            color: axisBorderColor,
           },
           ticks: {
             color: tickColor,
@@ -202,48 +217,56 @@ export function MonitorTrendChart({
                 }
               }
               return raw;
-            }
-          }
+            },
+          },
         },
         yTokens: {
           beginAtZero: true,
           position: 'left',
           grid: {
-            color: gridColor
+            color: gridColor,
           },
           border: {
-            color: axisBorderColor
+            color: axisBorderColor,
           },
           ticks: {
             color: tickColor,
             font: { size: tickFontSize },
-            callback: (value, _index, ticks) => formatTokenAxisValue(Number(value), ticks)
-          }
+            callback: (value, _index, ticks) => formatTokenAxisValue(Number(value), ticks),
+          },
         },
         yCost: {
+          display: hasPrices,
           beginAtZero: true,
           position: 'right',
           grid: {
-            drawOnChartArea: false
+            drawOnChartArea: false,
           },
           border: {
-            color: axisBorderColor
+            color: axisBorderColor,
           },
           ticks: {
             color: tickColor,
             font: { size: tickFontSize },
-            callback: (value) => formatCostValue(Number(value))
-          }
-        }
-      }
+            callback: (value) => formatCostValue(Number(value)),
+          },
+        },
+      },
     };
-  }, [isDark, isMobile, period, trend.labels]);
+  }, [isDark, isMobile, period, trend.labels, hasPrices]);
 
   return (
     <Card
-      title={t('monitoring_center.combined_trend_title')}
+      title={t('monitor_custom.trend_title')}
       extra={
         <div className={styles.periodButtons}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setMetric(metric === 'tokens' ? 'requests' : 'tokens')}
+          >
+            {t(metric === 'tokens' ? 'usage_stats.total_requests' : 'usage_stats.total_tokens')}
+          </Button>
           <Button
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
@@ -266,29 +289,26 @@ export function MonitorTrendChart({
         <div className={styles.hint}>{t('common.loading')}</div>
       ) : trend.labels.length > 0 ? (
         <div className={styles.chartWrapper}>
+          <p className={styles.cardHint}>{t('monitor_custom.bucket_hint')}</p>
           <div className={styles.chartLegend} aria-label="Chart legend">
             {chartData.datasets.map((dataset, index) => (
-              <div key={`${dataset.label}-${index}`} className={styles.legendItem} title={dataset.label}>
-                <span className={styles.legendDot} style={{ backgroundColor: String(dataset.borderColor) }} />
+              <div
+                key={`${dataset.label}-${index}`}
+                className={styles.legendItem}
+                title={dataset.label}
+              >
+                <span
+                  className={styles.legendDot}
+                  style={{ backgroundColor: String(dataset.borderColor) }}
+                />
                 <span className={styles.legendLabel}>{dataset.label}</span>
               </div>
             ))}
           </div>
           <div className={styles.chartArea}>
             <div className={styles.chartScroller}>
-              <div
-                className={styles.chartCanvas}
-                style={
-                  period === 'hour'
-                    ? { minWidth: getHourChartMinWidth(trend.labels.length, isMobile) }
-                    : undefined
-                }
-              >
-                <Chart
-                  type="bar"
-                  data={chartData as unknown as ChartData<'bar'>}
-                  options={chartOptions}
-                />
+              <div className={styles.chartCanvas}>
+                <Chart type="line" data={chartData} options={chartOptions} />
               </div>
             </div>
           </div>

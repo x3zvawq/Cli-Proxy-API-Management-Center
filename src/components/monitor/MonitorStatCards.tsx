@@ -1,11 +1,7 @@
 import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Line } from 'react-chartjs-2';
-import {
-  IconDollarSign,
-  IconSatellite,
-  IconTimer
-} from '@/components/ui/icons';
+import { IconDollarSign, IconSatellite, IconTimer } from '@/components/ui/icons';
 import { IconDiamond, IconTrendingUp } from './monitorIcons';
 import {
   calculateRecentPerMinuteRates,
@@ -14,11 +10,12 @@ import {
   formatPerMinuteValue,
   formatUsd,
   type ModelPrice,
-  type UsageTimeRange
+  type UsageTimeRange,
 } from '@/utils/usage';
 import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload, SparklineBundle } from '@/components/usage';
 import styles from '@/pages/MonitoringCenterPage.module.scss';
+import type { MonitorDateRange } from '@/utils/monitorAnalytics';
 
 interface StatCardData {
   key: string;
@@ -36,6 +33,7 @@ export interface MonitorStatCardsProps {
   loading: boolean;
   modelPrices: Record<string, ModelPrice>;
   rateWindowMinutes: number;
+  dateRange?: MonitorDateRange;
   timeRange: UsageTimeRange;
   sparklines: {
     requests: SparklineBundle | null;
@@ -51,14 +49,21 @@ export function MonitorStatCards({
   loading,
   modelPrices,
   rateWindowMinutes,
+  dateRange,
   timeRange,
-  sparklines
+  sparklines,
 }: MonitorStatCardsProps) {
   const { t } = useTranslation();
 
   const rateStats = useMemo(
-    () => calculateRecentPerMinuteRates(rateWindowMinutes, usage),
-    [rateWindowMinutes, usage]
+    () =>
+      dateRange
+        ? {
+            rpm: (usage?.total_requests ?? 0) / ((dateRange.endMs - dateRange.startMs) / 60_000),
+            tpm: (usage?.total_tokens ?? 0) / ((dateRange.endMs - dateRange.startMs) / 60_000),
+          }
+        : calculateRecentPerMinuteRates(rateWindowMinutes, usage),
+    [rateWindowMinutes, usage, dateRange]
   );
   const totalCost = useMemo(() => calculateTotalCost(usage, modelPrices), [usage, modelPrices]);
   const hasPrices = Object.keys(modelPrices).length > 0;
@@ -72,7 +77,7 @@ export function MonitorStatCards({
       accentSoft: 'rgba(139, 134, 128, 0.18)',
       accentBorder: 'rgba(139, 134, 128, 0.35)',
       value: loading ? '-' : (usage?.total_requests ?? 0).toLocaleString(),
-      trend: sparklines.requests
+      trend: sparklines.requests,
     },
     {
       key: 'tokens',
@@ -82,27 +87,35 @@ export function MonitorStatCards({
       accentSoft: 'rgba(139, 92, 246, 0.18)',
       accentBorder: 'rgba(139, 92, 246, 0.35)',
       value: loading ? '-' : formatCompactNumber(usage?.total_tokens ?? 0),
-      trend: sparklines.tokens
+      trend: sparklines.tokens,
     },
     {
       key: 'rpm',
-      label: timeRange === 'all' ? t('usage_stats.rpm_30m') : 'RPM',
+      label: dateRange
+        ? t('monitor_custom.average_rpm')
+        : timeRange === 'all'
+          ? t('usage_stats.rpm_30m')
+          : 'RPM',
       icon: <IconTimer size={16} />,
       accent: '#22c55e',
       accentSoft: 'rgba(34, 197, 94, 0.18)',
       accentBorder: 'rgba(34, 197, 94, 0.32)',
       value: loading ? '-' : formatPerMinuteValue(rateStats.rpm),
-      trend: sparklines.rpm
+      trend: sparklines.rpm,
     },
     {
       key: 'tpm',
-      label: timeRange === 'all' ? t('usage_stats.tpm_30m') : 'TPM',
+      label: dateRange
+        ? t('monitor_custom.average_tpm')
+        : timeRange === 'all'
+          ? t('usage_stats.tpm_30m')
+          : 'TPM',
       icon: <IconTrendingUp size={16} />,
       accent: '#f97316',
       accentSoft: 'rgba(249, 115, 22, 0.18)',
       accentBorder: 'rgba(249, 115, 22, 0.32)',
       value: loading ? '-' : formatPerMinuteValue(rateStats.tpm),
-      trend: sparklines.tpm
+      trend: sparklines.tpm,
     },
     {
       key: 'cost',
@@ -112,8 +125,8 @@ export function MonitorStatCards({
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
       value: loading ? '-' : hasPrices ? formatUsd(totalCost) : '--',
-      trend: hasPrices ? sparklines.cost : null
-    }
+      trend: hasPrices ? sparklines.cost : null,
+    },
   ];
 
   return (
@@ -126,7 +139,7 @@ export function MonitorStatCards({
             {
               '--accent': card.accent,
               '--accent-soft': card.accentSoft,
-              '--accent-border': card.accentBorder
+              '--accent-border': card.accentBorder,
             } as CSSProperties
           }
         >
@@ -135,13 +148,19 @@ export function MonitorStatCards({
             <span className={styles.statIconBadge}>{card.icon}</span>
           </div>
           <div className={styles.statValue}>{card.value}</div>
-          <div className={styles.statTrend}>
-            {card.trend ? (
-              <Line className={styles.sparkline} data={card.trend.data} options={sparklineOptions} />
-            ) : (
-              <div className={styles.statTrendPlaceholder}></div>
-            )}
-          </div>
+          {!dateRange && (
+            <div className={styles.statTrend}>
+              {card.trend ? (
+                <Line
+                  className={styles.sparkline}
+                  data={card.trend.data}
+                  options={sparklineOptions}
+                />
+              ) : (
+                <div className={styles.statTrendPlaceholder}></div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

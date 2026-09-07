@@ -19,7 +19,7 @@ import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
   calculateCacheHitRatio,
-  collectUsageDetails,
+  collectUsageDetailsWithEndpoint,
   extractFirstByteLatencyMs,
   extractGenerationMs,
   extractTotalTokens,
@@ -28,12 +28,13 @@ import {
   type UsageThinking,
 } from '@/utils/usage';
 import { downloadBlob } from '@/utils/download';
+import { monitorKeyLabel } from '@/utils/monitorAnalytics';
 import styles from '@/pages/UsagePage.module.scss';
 
 const ALL_FILTER = '__all__';
 const RESULT_SUCCESS_FILTER = 'success';
 const RESULT_FAILURE_FILTER = 'failure';
-const MAX_RENDERED_EVENTS = 500;
+const EVENTS_PAGE_SIZE = 50;
 
 type RequestEventRow = {
   id: string;
@@ -42,6 +43,7 @@ type RequestEventRow = {
   timestampMs: number;
   timestampLabel: string;
   model: string;
+  apiKey: string;
   sourceKey: string;
   sourceRaw: string;
   source: string;
@@ -92,9 +94,7 @@ const MAX_CUSTOM_AUTO_REFRESH_SECONDS = 3600;
 const DEFAULT_CUSTOM_AUTO_REFRESH_SECONDS = 60;
 
 type AutoRefreshValue =
-  | keyof typeof AUTO_REFRESH_INTERVALS
-  | typeof AUTO_REFRESH_OFF
-  | typeof AUTO_REFRESH_CUSTOM;
+  keyof typeof AUTO_REFRESH_INTERVALS | typeof AUTO_REFRESH_OFF | typeof AUTO_REFRESH_CUSTOM;
 
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
@@ -107,7 +107,10 @@ const normalizeCustomAutoRefreshSeconds = (value: unknown): number => {
   if (!Number.isFinite(parsed)) {
     return DEFAULT_CUSTOM_AUTO_REFRESH_SECONDS;
   }
-  return Math.min(Math.max(parsed, MIN_CUSTOM_AUTO_REFRESH_SECONDS), MAX_CUSTOM_AUTO_REFRESH_SECONDS);
+  return Math.min(
+    Math.max(parsed, MIN_CUSTOM_AUTO_REFRESH_SECONDS),
+    MAX_CUSTOM_AUTO_REFRESH_SECONDS
+  );
 };
 
 const normalizeThinkingText = (value: unknown): string => {
@@ -203,6 +206,8 @@ export function RequestEventsDetailsCard({
   const deleteUsageRecords = useUsageStatsStore((state) => state.deleteUsageRecords);
 
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
+  const [apiKeyFilter, setApiKeyFilter] = useState(ALL_FILTER);
+  const [page, setPage] = useState(1);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [resultFilter, setResultFilter] = useState(ALL_FILTER);
   const [autoRefreshValue, setAutoRefreshValue] = useState<AutoRefreshValue>(AUTO_REFRESH_OFF);
@@ -274,7 +279,7 @@ export function RequestEventsDetailsCard({
       { value: '30s', label: '30s' },
       { value: '1m', label: '1m' },
       { value: '5m', label: '5m' },
-      { value: AUTO_REFRESH_CUSTOM, label: t('monitoring_center.auto_refresh_custom') }
+      { value: AUTO_REFRESH_CUSTOM, label: t('monitoring_center.auto_refresh_custom') },
     ],
     [t]
   );
@@ -308,16 +313,21 @@ export function RequestEventsDetailsCard({
     setNextRefreshAtMs(nextRefreshAt);
   }, [autoRefreshDelay, lastRefreshedAt]);
 
-  useInterval(() => {
-    setCountdownNowMs(Date.now());
-  }, autoRefreshDelay ? 1000 : null);
+  useInterval(
+    () => {
+      setCountdownNowMs(Date.now());
+    },
+    autoRefreshDelay ? 1000 : null
+  );
 
   const handleCustomAutoRefreshSecondsChange = useCallback((value: string) => {
     setCustomAutoRefreshSeconds(value.replace(/\D/g, ''));
   }, []);
 
   const handleCustomAutoRefreshSecondsBlur = useCallback(() => {
-    setCustomAutoRefreshSeconds(normalizeCustomAutoRefreshSeconds(customAutoRefreshSeconds).toString());
+    setCustomAutoRefreshSeconds(
+      normalizeCustomAutoRefreshSeconds(customAutoRefreshSeconds).toString()
+    );
   }, [customAutoRefreshSeconds]);
 
   useInterval(() => {
@@ -332,7 +342,7 @@ export function RequestEventsDetailsCard({
       : null;
 
   const rows = useMemo<RequestEventRow[]>(() => {
-    const details = collectUsageDetails(usage);
+    const details = collectUsageDetailsWithEndpoint(usage);
 
     const baseRows = details.map((detail, index) => {
       const timestamp = detail.timestamp;
@@ -359,10 +369,7 @@ export function RequestEventsDetailsCard({
         Math.max(toNumber(detail.tokens?.cached_tokens), 0),
         Math.max(toNumber(detail.tokens?.cache_tokens), 0)
       );
-      const cacheCreationTokens = Math.max(
-        toNumber(detail.tokens?.cache_creation_tokens),
-        0
-      );
+      const cacheCreationTokens = Math.max(toNumber(detail.tokens?.cache_creation_tokens), 0);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
         extractTotalTokens(detail)
@@ -382,7 +389,8 @@ export function RequestEventsDetailsCard({
       });
       const serviceTier = normalizeThinkingText(detail.service_tier);
       const failStatusCode =
-        typeof detail.failure_status_code === 'number' && Number.isFinite(detail.failure_status_code)
+        typeof detail.failure_status_code === 'number' &&
+        Number.isFinite(detail.failure_status_code)
           ? detail.failure_status_code
           : null;
       const failBody =
@@ -395,6 +403,7 @@ export function RequestEventsDetailsCard({
         timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
         timestampLabel: date ? date.toLocaleString(i18n.language) : timestamp || '-',
         model,
+        apiKey: detail.__endpoint,
         sourceKey,
         sourceRaw: sourceRaw || '-',
         source,
@@ -471,6 +480,16 @@ export function RequestEventsDetailsCard({
     [rows, t]
   );
 
+  const apiKeyOptions = useMemo(
+    () => [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      ...[...new Set(rows.map((row) => row.apiKey))]
+        .sort()
+        .map((value) => ({ value, label: monitorKeyLabel(value) })),
+    ],
+    [rows, t]
+  );
+
   const sourceOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
     rows.forEach((row) => {
@@ -511,6 +530,9 @@ export function RequestEventsDetailsCard({
   );
 
   const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
+  const effectiveApiKeyFilter = apiKeyOptions.some((option) => option.value === apiKeyFilter)
+    ? apiKeyFilter
+    : ALL_FILTER;
   const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
   const effectiveResultFilter = resultOptionSet.has(resultFilter) ? resultFilter : ALL_FILTER;
 
@@ -524,19 +546,46 @@ export function RequestEventsDetailsCard({
         const resultMatched =
           effectiveResultFilter === ALL_FILTER ||
           (effectiveResultFilter === RESULT_FAILURE_FILTER ? row.failed : !row.failed);
-        return modelMatched && sourceMatched && resultMatched;
+        return (
+          modelMatched &&
+          sourceMatched &&
+          resultMatched &&
+          (effectiveApiKeyFilter === ALL_FILTER || row.apiKey === effectiveApiKeyFilter)
+        );
       }),
-    [effectiveModelFilter, effectiveResultFilter, effectiveSourceFilter, rows]
+    [
+      effectiveModelFilter,
+      effectiveResultFilter,
+      effectiveSourceFilter,
+      effectiveApiKeyFilter,
+      rows,
+    ]
   );
 
-  const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / EVENTS_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const renderedRows = filteredRows.slice(
+    (currentPage - 1) * EVENTS_PAGE_SIZE,
+    currentPage * EVENTS_PAGE_SIZE
+  );
+  useEffect(() => {
+    setPage(1);
+  }, [
+    effectiveModelFilter,
+    effectiveSourceFilter,
+    effectiveResultFilter,
+    effectiveApiKeyFilter,
+    usage,
+  ]);
 
   const hasActiveFilters =
+    effectiveApiKeyFilter !== ALL_FILTER ||
     effectiveModelFilter !== ALL_FILTER ||
     effectiveSourceFilter !== ALL_FILTER ||
     effectiveResultFilter !== ALL_FILTER;
 
   const handleClearFilters = () => {
+    setApiKeyFilter(ALL_FILTER);
     setModelFilter(ALL_FILTER);
     setSourceFilter(ALL_FILTER);
     setResultFilter(ALL_FILTER);
@@ -546,6 +595,7 @@ export function RequestEventsDetailsCard({
     if (!filteredRows.length) return;
 
     const csvHeader = [
+      'downstream_api_key_masked',
       'timestamp',
       'model',
       'source',
@@ -565,6 +615,7 @@ export function RequestEventsDetailsCard({
 
     const csvRows = filteredRows.map((row) =>
       [
+        monitorKeyLabel(row.apiKey),
         row.timestamp,
         row.model,
         row.source,
@@ -603,6 +654,7 @@ export function RequestEventsDetailsCard({
     if (!filteredRows.length) return;
 
     const payload = filteredRows.map((row) => ({
+      downstream_api_key_masked: monitorKeyLabel(row.apiKey),
       timestamp: row.timestamp,
       model: row.model,
       source: row.source,
@@ -714,6 +766,17 @@ export function RequestEventsDetailsCard({
     >
       <div className={styles.requestEventsToolbar}>
         <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>{t('monitor_custom.apiKey')}</span>
+          <Select
+            value={effectiveApiKeyFilter}
+            options={apiKeyOptions}
+            onChange={setApiKeyFilter}
+            ariaLabel={t('monitor_custom.detail_key')}
+            className={styles.requestEventsSelect}
+            fullWidth={false}
+          />
+        </div>
+        <div className={styles.requestEventsFilterItem}>
           <span className={styles.requestEventsFilterLabel}>
             {t('usage_stats.request_events_filter_model')}
           </span>
@@ -755,7 +818,9 @@ export function RequestEventsDetailsCard({
         {onRefresh && (
           <div className={styles.requestEventsFilterItem}>
             <span className={styles.requestEventsFilterLabelRow}>
-              <span className={styles.requestEventsFilterLabel}>{t('monitoring_center.auto_refresh')}</span>
+              <span className={styles.requestEventsFilterLabel}>
+                {t('monitoring_center.auto_refresh')}
+              </span>
               {autoRefreshCountdown !== null && (
                 <span className={styles.requestEventsCountdown}>
                   {t('monitoring_center.auto_refresh_countdown', { count: autoRefreshCountdown })}
@@ -804,13 +869,23 @@ export function RequestEventsDetailsCard({
         <>
           <div className={styles.requestEventsMeta}>
             <span>{t('usage_stats.request_events_count', { count: filteredRows.length })}</span>
-            {filteredRows.length > MAX_RENDERED_EVENTS && (
-              <span className={styles.requestEventsLimitHint}>
-                {t('usage_stats.request_events_limit_hint', {
-                  shown: MAX_RENDERED_EVENTS,
-                })}
-              </span>
-            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              {t('monitor_custom.previous')}
+            </Button>
+            <span>{t('monitor_custom.page', { current: currentPage, total: pageCount })}</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={currentPage >= pageCount}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              {t('monitor_custom.next')}
+            </Button>
           </div>
 
           <div className={styles.requestEventsTableWrapper}>
@@ -819,6 +894,7 @@ export function RequestEventsDetailsCard({
                 <col className={styles.requestEventsActionCol} />
                 <col className={styles.requestEventsTimestampCol} />
                 <col className={styles.requestEventsModelCol} />
+                <col className={styles.requestEventsSourceCol} />
                 <col className={styles.requestEventsSourceCol} />
                 <col className={styles.requestEventsTierCol} />
                 <col className={styles.requestEventsResultCol} />
@@ -839,6 +915,7 @@ export function RequestEventsDetailsCard({
                   <th aria-label={t('usage_stats.request_events_delete_action')} />
                   <th>{t('usage_stats.request_events_timestamp')}</th>
                   <th>{t('usage_stats.model_name')}</th>
+                  <th>{t('monitor_custom.apiKey')}</th>
                   <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.request_events_tier')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
@@ -874,6 +951,7 @@ export function RequestEventsDetailsCard({
                       {row.timestampLabel}
                     </td>
                     <td className={styles.modelCell}>{row.model}</td>
+                    <td title={monitorKeyLabel(row.apiKey)}>{monitorKeyLabel(row.apiKey)}</td>
                     <td className={styles.requestEventsSourceCell} title={row.source}>
                       <span>{row.source}</span>
                       {row.sourceType && (
@@ -898,11 +976,15 @@ export function RequestEventsDetailsCard({
                           {t('stats.failure')}
                         </button>
                       ) : (
-                        <span className={styles.requestEventsResultSuccess}>{t('stats.success')}</span>
+                        <span className={styles.requestEventsResultSuccess}>
+                          {t('stats.success')}
+                        </span>
                       )}
                     </td>
                     {hasTimingData && (
-                      <td className={styles.durationCell}>{formatDurationMs(row.firstByteLatencyMs)}</td>
+                      <td className={styles.durationCell}>
+                        {formatDurationMs(row.firstByteLatencyMs)}
+                      </td>
                     )}
                     {hasTimingData && (
                       <td className={styles.durationCell}>{formatDurationMs(row.generationMs)}</td>
@@ -972,7 +1054,9 @@ export function RequestEventsDetailsCard({
                 <span className={styles.requestEventsFailureMetaLabel}>
                   {t('usage_stats.request_events_failure_log_model')}
                 </span>
-                <span className={styles.requestEventsFailureMetaValue}>{selectedFailureRow.model}</span>
+                <span className={styles.requestEventsFailureMetaValue}>
+                  {selectedFailureRow.model}
+                </span>
               </div>
             </div>
 
@@ -981,7 +1065,9 @@ export function RequestEventsDetailsCard({
                 <span className={styles.requestEventsFailureMetaLabel}>
                   {t('usage_stats.request_events_failure_log_credential')}
                 </span>
-                <span className={styles.requestEventsFailureMetaValue}>{selectedCredentialInfo.name}</span>
+                <span className={styles.requestEventsFailureMetaValue}>
+                  {selectedCredentialInfo.name}
+                </span>
               </div>
             )}
 

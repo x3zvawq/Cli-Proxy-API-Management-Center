@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { monitorKeyLabel } from '@/utils/monitorAnalytics';
 import { Card } from '@/components/ui/Card';
 import type { UsagePayload } from '@/components/usage';
 import {
@@ -11,7 +12,7 @@ import {
   formatDurationMs,
   formatUsdFixedOne,
   type ModelPrice,
-  type UsageDetail
+  type UsageDetail,
 } from '@/utils/usage';
 import styles from '@/pages/MonitoringCenterPage.module.scss';
 
@@ -82,7 +83,7 @@ export function MonitorApiKeyStatsCard({
   loading,
   modelPrices,
   title,
-  extra
+  extra,
 }: MonitorApiKeyStatsCardProps) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>('requests');
@@ -105,7 +106,7 @@ export function MonitorApiKeyStatsCard({
         firstByteLatencyTotalMs: 0,
         firstByteLatencySampleCount: 0,
         totalTps: 0,
-        tpsSampleCount: 0
+        tpsSampleCount: 0,
       };
 
       if (models) {
@@ -140,7 +141,8 @@ export function MonitorApiKeyStatsCard({
             const generationMs = extractGenerationMs(detailRecord);
             const tokens = isRecord(detailRecord.tokens) ? detailRecord.tokens : null;
             const outputTokens = toNonNegativeNumber(tokens?.output_tokens);
-            const tps = generationMs && generationMs > 0 ? outputTokens / (generationMs / 1000) : null;
+            const tps =
+              generationMs && generationMs > 0 ? outputTokens / (generationMs / 1000) : null;
             if (tps !== null && Number.isFinite(tps) && tps >= 0) {
               totals.totalTps += tps;
               totals.tpsSampleCount += 1;
@@ -163,7 +165,7 @@ export function MonitorApiKeyStatsCard({
           totals.firstByteLatencySampleCount > 0
             ? totals.firstByteLatencyTotalMs / totals.firstByteLatencySampleCount
             : null,
-        averageTps: totals.tpsSampleCount > 0 ? totals.totalTps / totals.tpsSampleCount : null
+        averageTps: totals.tpsSampleCount > 0 ? totals.totalTps / totals.tpsSampleCount : null,
       };
     });
   }, [modelPrices, usage]);
@@ -201,7 +203,11 @@ export function MonitorApiKeyStatsCard({
     sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
 
   return (
-    <Card title={title ?? t('monitoring_center.usage_stats_title')} extra={extra} className={styles.detailsFixedCard}>
+    <Card
+      title={title ?? t('monitoring_center.usage_stats_title')}
+      extra={extra}
+      className={styles.detailsFixedCard}
+    >
       {loading ? (
         <div className={styles.hint}>{t('common.loading')}</div>
       ) : sortedRows.length > 0 ? (
@@ -240,7 +246,10 @@ export function MonitorApiKeyStatsCard({
                       {arrow('tokens')}
                     </button>
                   </th>
-                  <th className={styles.sortableHeader} aria-sort={ariaSort('averageFirstByteLatencyMs')}>
+                  <th
+                    className={styles.sortableHeader}
+                    aria-sort={ariaSort('averageFirstByteLatencyMs')}
+                  >
                     <button
                       type="button"
                       className={styles.sortHeaderButton}
@@ -285,18 +294,28 @@ export function MonitorApiKeyStatsCard({
               <tbody>
                 {sortedRows.map((row) => (
                   <tr key={row.apiKey}>
-                    <td className={styles.modelCell} title={row.apiKey}>{row.apiKey}</td>
+                    <td className={styles.modelCell} title={monitorKeyLabel(row.apiKey)}>
+                      {monitorKeyLabel(row.apiKey)}
+                    </td>
                     <td>
                       <span className={styles.requestCountCell}>
                         <span>{row.requests.toLocaleString()}</span>
                         <span className={styles.requestBreakdown}>
-                          (<span className={styles.statSuccess}>{row.successCount.toLocaleString()}</span>{' '}
-                          <span className={styles.statFailure}>{row.failureCount.toLocaleString()}</span>)
+                          (
+                          <span className={styles.statSuccess}>
+                            {row.successCount.toLocaleString()}
+                          </span>{' '}
+                          <span className={styles.statFailure}>
+                            {row.failureCount.toLocaleString()}
+                          </span>
+                          )
                         </span>
                       </span>
                     </td>
                     <td>{formatCompactNumber(row.tokens)}</td>
-                    <td className={styles.durationCell}>{formatDurationMs(row.averageFirstByteLatencyMs)}</td>
+                    <td className={styles.durationCell}>
+                      {formatDurationMs(row.averageFirstByteLatencyMs)}
+                    </td>
                     <td>{row.averageTps !== null ? row.averageTps.toFixed(2) : '--'}</td>
                     <td>
                       <span
