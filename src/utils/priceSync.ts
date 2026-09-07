@@ -15,6 +15,20 @@ const PRICING_URL = 'https://models.dev/api.json';
 const REQUEST_TIMEOUT_MS = 15_000;
 const SYNC_SETTINGS_STORAGE_KEY = 'cli-proxy-model-sync-settings-v1';
 
+// Codex ChatGPT-sign-in catalog checked 2026-09-07:
+// https://developers.openai.com/codex/models/
+// Includes the documented gpt-5.6 default alias. Prices always come from models.dev,
+// not a hardcoded price table; catalog membership does not imply account access.
+export const CODEX_PRICE_MODELS = [
+  'gpt-6-astra',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gpt-5.6',
+  'gpt-5.5',
+  'gpt-5.3-codex-spark',
+] as const;
+
 export const DEFAULT_PROVIDER_PRIORITY: readonly string[] = Object.freeze([
   'openai',
   'google',
@@ -361,6 +375,11 @@ function processData(
           ? (model.cost as Record<string, unknown>)
           : {};
 
+      // A catalog entry without prices is not a free model.
+      if (![cost.input, cost.output].every((value) =>
+        typeof value === 'number' && Number.isFinite(value) && value >= 0
+      )) continue;
+
       for (const matched of matchedExacts) {
         const existing = chosenProviders[matched];
         if (existing && existing.rank < rank) continue;
@@ -402,14 +421,31 @@ export async function syncPrices(
   settings: SyncSettings,
 ): Promise<SyncResult> {
   if (modelNames.length === 0) {
-    throw new Error('当前没有可同步的模型，请确保已有使用数据。');
+    throw new Error('当前没有可同步的模型。');
   }
 
   const allowed = buildAllowedModelNames(modelNames, settings);
+  const rawData = await fetchPricingData();
+  const prices = processData(rawData, allowed, settings);
+  const matchedCount = Object.keys(prices).length;
 
+  return { prices, matchedCount, totalModels: allowed.count };
+}
+
+export async function syncCodexPrices(): Promise<SyncResult> {
+  const rawData = await fetchPricingData();
+  const settings = getDefaultSyncSettings();
+  const allowed = buildAllowedModelNames([...CODEX_PRICE_MODELS], settings);
+  // Do not substitute a reseller's rates for OpenAI rates or apply user aliases
+  // to this explicit Codex-catalog operation. Advanced sync remains available.
+  const prices = processData({ openai: rawData.openai }, allowed, settings);
+  return { prices, matchedCount: Object.keys(prices).length, totalModels: allowed.count };
+}
+
+async function fetchPricingData(): Promise<Record<string, unknown>> {
   // Fetch pricing data from models.dev
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   let rawData: Record<string, unknown>;
   try {
@@ -427,11 +463,8 @@ export async function syncPrices(
     }
     throw err;
   } finally {
-    window.clearTimeout(timer);
+    globalThis.clearTimeout(timer);
   }
 
-  const prices = processData(rawData, allowed, settings);
-  const matchedCount = Object.keys(prices).length;
-
-  return { prices, matchedCount, totalModels: allowed.count };
+  return rawData;
 }

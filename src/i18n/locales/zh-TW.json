@@ -1,5 +1,11 @@
 {
   "monitor_custom": {
+    "price_entry": "模型價格",
+    "sync_codex": "同步全部 Codex 模型",
+    "advanced_sync": "進階同步",
+    "codex_price_hint": "一鍵從 models.dev 的 OpenAI 價格表同步目前 Codex 模型（含 gpt-5.6 別名），不需使用記錄。更新這些模型的已儲存價格，保留其他模型；價格儲存在目前瀏覽器，僅供費用估算。",
+    "codex_sync_success": "已同步 {{count}} 個 Codex 模型的價格（含輸入、輸出、快取與上下文階梯）。",
+    "codex_sync_missing": "價格來源缺少資料，未覆寫：{{models}}。",
     "tier_thinking": "Tier / 思考",
     "request_cost": "估算費用 (USD)",
     "cost_estimated": "按設定單價",

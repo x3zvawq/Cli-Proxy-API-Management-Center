@@ -750,6 +750,12 @@
   flex-shrink: 0;
 }
 
+.priceHeaderActions {
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  gap: 6px;
+}
+
 .editModalBody {
   display: flex;
   flex-direction: column;

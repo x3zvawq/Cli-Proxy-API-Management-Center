@@ -11,6 +11,8 @@ import {
   saveSyncSettings,
   sanitizeSyncSettings,
   syncPrices,
+  syncCodexPrices,
+  CODEX_PRICE_MODELS,
   parseLinesToList,
   parseLinesToMappingList,
   formatMappingListForTextarea,
@@ -85,6 +87,10 @@ export function PriceSettingsCard({
   onPricesChange
 }: PriceSettingsCardProps) {
   const { t } = useTranslation();
+  const availableModels = useMemo(
+    () => [...new Set([...CODEX_PRICE_MODELS, ...modelNames, ...Object.keys(modelPrices)])].sort(),
+    [modelNames, modelPrices]
+  );
 
   // Add form state
   const [selectedModel, setSelectedModel] = useState('');
@@ -200,9 +206,9 @@ export function PriceSettingsCard({
   const options = useMemo(
     () => [
       { value: '', label: t('usage_stats.model_price_select_placeholder') },
-      ...modelNames.map((name) => ({ value: name, label: name }))
+      ...availableModels.map((name) => ({ value: name, label: name }))
     ],
-    [modelNames, t]
+    [availableModels, t]
   );
 
   // ---- Tier multiplier modal handlers ----
@@ -302,7 +308,7 @@ export function PriceSettingsCard({
       const saved = saveSyncSettings(collectSettingsFromInputs());
       applySettingsToInputs(saved);
 
-      const result = await syncPrices(modelNames, saved);
+      const result = await syncPrices(availableModels, saved);
 
       if (result.matchedCount === 0) {
         setSyncStatusMsg(t('usage_stats.price_sync_status_no_match'));
@@ -333,10 +339,31 @@ export function PriceSettingsCard({
     t,
     collectSettingsFromInputs,
     applySettingsToInputs,
-    modelNames,
+    availableModels,
     modelPrices,
     onPricesChange,
   ]);
+
+  const handleSyncCodex = async () => {
+    if (syncPending) return;
+    setSyncPending(true);
+    setSyncStatusMsg(t('usage_stats.price_sync_status_fetching'));
+    setSyncStatusType('info');
+    try {
+      const result = await syncCodexPrices();
+      if (!result.matchedCount) throw new Error(t('usage_stats.price_sync_status_no_match'));
+      onPricesChange({ ...modelPrices, ...result.prices });
+      const missing = CODEX_PRICE_MODELS.filter((model) => !result.prices[model]);
+      setSyncStatusMsg(t('monitor_custom.codex_sync_success', { count: result.matchedCount }) +
+        (missing.length ? ` ${t('monitor_custom.codex_sync_missing', { models: missing.join(', ') })}` : ''));
+      setSyncStatusType('success');
+    } catch (err) {
+      setSyncStatusMsg(err instanceof Error ? err.message : String(err));
+      setSyncStatusType('error');
+    } finally {
+      setSyncPending(false);
+    }
+  };
 
   const syncStatusClass = syncStatusType === 'success'
     ? `${styles.syncStatus} ${styles.syncStatusSuccess}`
@@ -345,18 +372,26 @@ export function PriceSettingsCard({
       : `${styles.syncStatus} ${styles.syncStatusInfo}`;
 
   const headerActions = (
-    <div className={styles.priceActions}>
-      <Button variant="secondary" size="sm" onClick={handleOpenTier}>
+    <div className={`${styles.priceActions} ${styles.priceHeaderActions}`}>
+      <Button variant="primary" size="sm" onClick={handleSyncCodex} disabled={syncPending} loading={syncPending}>
+        {t('monitor_custom.sync_codex')}
+      </Button>
+      <Button variant="secondary" size="sm" onClick={handleOpenTier} disabled={syncPending}>
         {t('usage_stats.tier_multiplier_button')}
       </Button>
-      <Button variant="secondary" size="sm" onClick={handleOpenSync}>
-        {t('usage_stats.price_sync_button')}
+      <Button variant="secondary" size="sm" onClick={handleOpenSync} disabled={syncPending}>
+        {t('monitor_custom.advanced_sync')}
       </Button>
     </div>
   );
 
   return (
     <Card title={t('usage_stats.model_price_settings')} extra={headerActions}>
+      <p className={styles.hint}>
+        {t('monitor_custom.codex_price_hint')}{' '}
+        <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a>
+      </p>
+      {syncStatusMsg && !syncOpen && <div className={syncStatusClass} role="status">{syncStatusMsg}</div>}
       <div className={styles.pricingSection}>
         {/* Price Form */}
         <div className={styles.priceForm}>
@@ -410,7 +445,7 @@ export function PriceSettingsCard({
                 step="0.0001"
               />
             </div>
-            <Button variant="primary" onClick={handleSavePrice} disabled={!selectedModel}>
+            <Button variant="primary" onClick={handleSavePrice} disabled={!selectedModel || syncPending}>
               {t('common.save')}
             </Button>
           </div>
@@ -448,10 +483,10 @@ export function PriceSettingsCard({
                     </div>
                   </div>
                   <div className={styles.priceActions}>
-                    <Button variant="secondary" size="sm" onClick={() => handleOpenEdit(model)}>
+                    <Button variant="secondary" size="sm" onClick={() => handleOpenEdit(model)} disabled={syncPending}>
                       {t('common.edit')}
                     </Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDeletePrice(model)}>
+                    <Button variant="danger" size="sm" onClick={() => handleDeletePrice(model)} disabled={syncPending}>
                       {t('common.delete')}
                     </Button>
                   </div>

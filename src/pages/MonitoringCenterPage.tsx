@@ -102,6 +102,7 @@ export function MonitoringCenterPage() {
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
   const [customRange, setCustomRange] = useState<MonitorDateRange>();
   const [showCustomRange, setShowCustomRange] = useState(false);
+  const [priceSettingsOpen, setPriceSettingsOpen] = useState(false);
   const [startDraft, setStartDraft] = useState(() => toLocalDateTime(Date.now() - 86_400_000));
   const [endDraft, setEndDraft] = useState(() => toLocalDateTime(Date.now()));
   const [rangeError, setRangeError] = useState(false);
@@ -266,6 +267,15 @@ export function MonitoringCenterPage() {
       <div className={styles.header}>
         <h1 className={styles.pageTitle}>{t('monitoring_center.title')}</h1>
         <div className={styles.headerActions}>
+          <Button
+            variant={priceSettingsOpen ? 'primary' : 'secondary'}
+            size="sm"
+            aria-expanded={priceSettingsOpen}
+            aria-controls="monitor-model-prices"
+            onClick={() => setPriceSettingsOpen((open) => !open)}
+          >
+            {t('monitor_custom.price_entry')}
+          </Button>
           <div className={styles.timeRangeButtons}>
             {USAGE_TIME_RANGE_OPTIONS.map((option) => (
               <Button
@@ -302,6 +312,14 @@ export function MonitoringCenterPage() {
       </div>
 
       {error && <div className={styles.errorBox}>{error}</div>}
+
+      <section id="monitor-model-prices" hidden={!priceSettingsOpen} aria-label={t('monitor_custom.price_entry')}>
+        <PriceSettingsCard
+          modelNames={modelNames}
+          modelPrices={modelPrices}
+          onPricesChange={setModelPrices}
+        />
+      </section>
 
       <section className={styles.filterPanel} aria-label={t('monitor_custom.filters')}>
         {showCustomRange && (
@@ -436,11 +454,6 @@ export function MonitoringCenterPage() {
             extra={usageStatsToggle}
           />
         )}
-        <PriceSettingsCard
-          modelNames={modelNames}
-          modelPrices={modelPrices}
-          onPricesChange={setModelPrices}
-        />
       </div>
 
       <div className={styles.fullWidthSection}>

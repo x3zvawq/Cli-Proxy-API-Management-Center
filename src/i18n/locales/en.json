@@ -1,5 +1,11 @@
 {
   "monitor_custom": {
+    "price_entry": "Model prices",
+    "sync_codex": "Sync all Codex models",
+    "advanced_sync": "Advanced sync",
+    "codex_price_hint": "Sync current Codex models (including the gpt-5.6 alias) from OpenAI's price entries on models.dev, without usage history. Replaces saved rates for these models and retains other models. Prices are saved in this browser and used for cost estimates only.",
+    "codex_sync_success": "Synced prices for {{count}} Codex models, including input, output, cache and context tiers.",
+    "codex_sync_missing": "Missing from price source; not overwritten: {{models}}.",
     "tier_thinking": "Tier / Reasoning",
     "request_cost": "Est. cost (USD)",
     "cost_estimated": "Configured rates",
