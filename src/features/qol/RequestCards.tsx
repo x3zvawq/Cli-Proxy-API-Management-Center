@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { RequestRow } from './api';
+import { formatTokens } from './display';
 import styles from './QolPage.module.scss';
 
 export function RequestCards({
@@ -26,8 +27,8 @@ export function RequestCards({
               {t(r.failed ? 'qol.failed' : 'qol.success')}
             </small>
             <small>
-              {keyLabel(r.key, r.key_label)} · ↑ {r.context.toLocaleString()} / ↓{' '}
-              {r.output.toLocaleString()}
+              {keyLabel(r.key, r.key_label)} · ↑ {formatTokens(r.context)} / ↓{' '}
+              {formatTokens(r.output)}
             </small>
           </summary>
           <dl className={styles.details}>

@@ -14,12 +14,14 @@ import {
 import { Line } from 'react-chartjs-2';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
+import { IconRefreshCw } from '@/components/ui/icons';
 import { PriceSettingsCard } from '@/components/usage/PriceSettingsCard';
 import { useAuthStore, useConfigStore } from '@/stores';
 import { authFilesApi } from '@/services/api/authFiles';
 import { toLocalDateTime } from '@/utils/monitorAnalytics';
-import { loadModelPrices, type ModelPrice } from '@/utils/usage';
-import { loadTierMultipliers, type TierMultiplierRule } from '@/utils/tierMultiplier';
+import { type ModelPrice } from '@/utils/usage';
+import { type TierMultiplierRule } from '@/utils/tierMultiplier';
 import {
   qolApi,
   type Account,
@@ -34,11 +36,18 @@ import { RequestCards } from './RequestCards';
 import { QuotaColumnMenu } from './QuotaColumnMenu';
 import { AccountQuota } from './AccountQuota';
 import { UsageBreakdown } from './UsageBreakdown';
+import { AccountName } from './AccountName';
+import { PlanBadge } from './PlanBadge';
+import { useQolPriceStore } from './priceStore';
+import { useQuotaRefresh } from './useQuotaRefresh';
+import quotaStyles from './AccountQuota.module.scss';
 import {
   keyPrefixes,
   quotaOptions,
   relativeTimeRange,
   readHiddenQuotas,
+  accountLabel,
+  formatTokens,
   type UsageView,
 } from './display';
 
@@ -102,7 +111,14 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   const [keyOptions, setKeyOptions] = useState<{ id: string; label: string }[]>([]);
   const [requests, setRequests] = useState<RequestPage | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [prices, setPrices] = useState<Prices>({});
+  const prices = useQolPriceStore((state) => state.prices);
+  const pricesLoaded = useQolPriceStore((state) => state.loaded);
+  const [usedModels, setUsedModels] = useState<string[]>([]);
+  const {
+    refresh: refreshQuota,
+    refreshing: quotaRefreshing,
+    status: refreshStatus,
+  } = useQuotaRefresh(setAccounts);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState('');
@@ -119,14 +135,30 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       .catch((e: Error) => {
         if (!controller.signal.aborted) setError(e.message);
       });
-    void qolApi
-      .prices(controller.signal)
-      .then(setPrices)
-      .catch((e: Error) => {
-        if (!controller.signal.aborted) setError(e.message);
-      });
     return () => controller.abort();
   }, [revision]);
+
+  useEffect(() => {
+    if (tab !== 'prices') return;
+    let active = true;
+    void useQolPriceStore
+      .getState()
+      .load()
+      .catch((e: Error) => {
+        if (active) setError(e.message);
+      });
+    const controller = new AbortController();
+    void qolApi
+      .models(controller.signal)
+      .then(setUsedModels)
+      .catch((e: Error) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== 'monitor') return;
@@ -172,7 +204,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   }, [filters, page, revision, tab]);
 
   useEffect(() => {
-    if (tab !== 'accounts') return;
+    if (tab !== 'accounts' || quotaRefreshing) return;
     let current: AbortController | undefined;
     const timer = window.setInterval(() => {
       if (document.hidden) return;
@@ -190,7 +222,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       clearInterval(timer);
       current?.abort();
     };
-  }, [tab]);
+  }, [tab, quotaRefreshing]);
 
   const mutate = async (operation: () => Promise<unknown>) => {
     setBusy(true);
@@ -222,11 +254,11 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
     setFilters((f) => ({ ...f, start: start.toISOString(), end: end.toISOString() }));
   };
   const names = useMemo(
-    () => new Map(accounts.map((a) => [a.auth_index, a.email || a.name])),
+    () => new Map(accounts.map((a) => [a.auth_index, accountLabel(a)])),
     [accounts]
   );
   const filteredAccounts = accounts.filter((a) =>
-    `${a.email} ${a.name} ${a.provider} ${a.quota?.plan || ''}`
+    `${a.display_name || ''} ${a.email} ${a.name} ${a.provider} ${a.quota?.plan || ''}`
       .toLowerCase()
       .includes(query.toLowerCase())
   );
@@ -250,7 +282,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           },
         ])
       );
-      setPrices(await qolApi.savePrices(merged));
+      await useQolPriceStore.getState().save(merged);
     });
   const totals = summary?.totals;
   const availableQuotas = quotaOptions(accounts);
@@ -305,7 +337,9 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                 onChange={(e) => setDraft({ ...draft, end: e.target.value })}
               />
             </label>
-            <Button onClick={applyRange}>{t('qol.apply')}</Button>
+            <Button size="sm" onClick={applyRange}>
+              {t('qol.apply')}
+            </Button>
             {[1, 7, 30].map((days) => (
               <Button
                 key={days}
@@ -358,7 +392,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                 <option value="">{t('qol.all')}</option>
                 {accounts.map((a) => (
                   <option key={a.auth_index || a.id} value={a.auth_index}>
-                    {a.email || a.name}
+                    {accountLabel(a)}
                   </option>
                 ))}
               </select>
@@ -379,8 +413,8 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
             {[
               ['requests', totals ? number(totals.requests) : '—'],
               ['cost', totals?.priced ? money(totals.cost) : '—'],
-              ['cache_read', totals ? number(totals.cache_read) : '—'],
-              ['cache_write', totals ? number(totals.cache_write) : '—'],
+              ['cache_read', totals ? formatTokens(totals.cache_read) : '—'],
+              ['cache_write', totals ? formatTokens(totals.cache_write) : '—'],
               [
                 'cache_hit',
                 totals?.context
@@ -465,9 +499,9 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                       <td data-label={t('qol.key')}>{keyLabel(r.key, r.key_label)}</td>
                       <td data-label={t('qol.tokens')}>
                         <button className={styles.tokenButton} onClick={() => setDetail(r)}>
-                          ↑ {number(r.context)} / ↓ {number(r.output)}
+                          ↑ {formatTokens(r.context)} / ↓ {formatTokens(r.output)}
                           <small>
-                            {t('qol.context')} {number(r.context)} ⓘ
+                            {t('qol.context')} {formatTokens(r.context)} ⓘ
                           </small>
                         </button>
                       </td>
@@ -520,16 +554,13 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
               {t('qol.search')}
               <input value={query} onChange={(e) => setQuery(e.target.value)} />
             </label>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void mutate(qolApi.refreshQuota)}
-            >
-              {t('qol.refresh_quota')}
-            </Button>
             <Link to="/auth-files">{t('qol.manage_files')}</Link>
           </div>
+          {refreshStatus && (
+            <p className={styles.hint} role="status">
+              {refreshStatus}
+            </p>
+          )}
           <p className={styles.hint}>{t('qol.quota_hint')}</p>
           <details className={styles.hint}>
             <summary>
@@ -541,15 +572,25 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
             <table className={`${styles.table} ${styles.accountTable}`}>
               <thead>
                 <tr>
-                  {['accounts', 'provider', 'plan', 'quota', 'proxy', 'status', 'actions'].map(
+                  {['accounts', 'provider', 'plan', 'enabled', 'quota', 'proxy', 'status'].map(
                     (id) => (
                       <th key={id} className={id === 'quota' ? styles.quotaHeader : undefined}>
                         {id === 'quota' ? (
-                          <QuotaColumnMenu
-                            options={availableQuotas}
-                            hidden={hiddenQuotas}
-                            onToggle={toggleQuota}
-                          />
+                          <div className={styles.quotaHeading}>
+                            <QuotaColumnMenu
+                              options={availableQuotas}
+                              hidden={hiddenQuotas}
+                              onToggle={toggleQuota}
+                            />
+                            <button
+                              className={quotaStyles.textButton}
+                              disabled={quotaRefreshing}
+                              onClick={() => void refreshQuota().catch(() => {})}
+                            >
+                              <IconRefreshCw size={13} />
+                              {t(quotaRefreshing ? 'qol.refreshing' : 'qol.refresh_all')}
+                            </button>
+                          </div>
                         ) : (
                           t(`qol.${id}`)
                         )}
@@ -562,33 +603,33 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                 {filteredAccounts.map((a) => (
                   <tr key={a.auth_index || a.id}>
                     <td data-label={t('qol.accounts')}>
-                      {a.email || a.name}
-                      <small>{a.name}</small>
+                      <AccountName account={a} onChange={() => setRevision((v) => v + 1)} />
                     </td>
                     <td data-label={t('qol.provider')}>{a.provider || a.type}</td>
-                    <td data-label={t('qol.plan')}>{a.quota?.plan || '—'}</td>
+                    <td data-label={t('qol.plan')}>
+                      <PlanBadge plan={a.quota?.plan} />
+                    </td>
+                    <td data-label={t('qol.enabled')} className={styles.switchCell}>
+                      <ToggleSwitch
+                        checked={!a.disabled}
+                        disabled={busy || quotaRefreshing}
+                        ariaLabel={`${t(a.disabled ? 'qol.enable' : 'qol.disable')} ${accountLabel(a)}`}
+                        onChange={(enabled) =>
+                          void mutate(() => authFilesApi.setStatus(a.name, !enabled))
+                        }
+                      />
+                    </td>
                     <td data-label={t('qol.quota')}>
                       <AccountQuota
                         account={a}
                         hidden={hiddenQuotas}
-                        onChange={() => setRevision((v) => v + 1)}
+                        onRefresh={refreshQuota}
+                        refreshing={quotaRefreshing}
                       />
                     </td>
                     <td data-label={t('qol.proxy')}>{a.quota?.proxy || '—'}</td>
                     <td data-label={t('qol.status')}>
                       {a.disabled ? t('qol.disabled') : a.status || t('qol.enabled')}
-                    </td>
-                    <td data-label={t('qol.actions')}>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() =>
-                          void mutate(() => authFilesApi.setStatus(a.name, !a.disabled))
-                        }
-                      >
-                        {t(a.disabled ? 'qol.enable' : 'qol.disable')}
-                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -601,15 +642,10 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       {tab === 'prices' && (
         <section>
           <p>{t('qol.prices_hint')}</p>
-          <Button
-            disabled={busy}
-            onClick={() => void savePrices(loadModelPrices(), loadTierMultipliers())}
-          >
-            {t('qol.import_prices')}
-          </Button>
-          <fieldset disabled={busy} className={styles.priceFieldset}>
+          <fieldset disabled={busy || !pricesLoaded} className={styles.priceFieldset}>
             <PriceSettingsCard
-              modelNames={Object.keys(prices)}
+              modelNames={usedModels}
+              usedModelNames={usedModels}
               modelPrices={prices}
               onPricesChange={(next) => savePrices(next)}
               tierRules={rules}

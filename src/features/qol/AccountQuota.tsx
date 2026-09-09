@@ -2,24 +2,32 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { IconRefreshCw, IconTimer } from '@/components/ui/icons';
 import { authFilesApi } from '@/services/api/authFiles';
 import { consumeCodexRateLimitResetCredit } from '@/features/quota/providers/codex/data';
-import { qolApi, type Account } from './api';
-import { canResetQuota, quotaLabel, quotaWindowId } from './display';
+import { type Account } from './api';
+import {
+  accountLabel,
+  canResetQuota,
+  formatTokens,
+  quotaLabel,
+  quotaWindowId,
+  quotaTone,
+} from './display';
 import styles from './AccountQuota.module.scss';
 
 const money = (value: number | null | undefined) => (value == null ? '—' : `$${value.toFixed(2)}`);
-const compact = (value: number) =>
-  Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 
 export function AccountQuota({
   account,
   hidden,
-  onChange,
+  onRefresh,
+  refreshing,
 }: {
   account: Account;
   hidden: string[];
-  onChange: () => void;
+  onRefresh: (account?: string) => Promise<void>;
+  refreshing: boolean;
 }) {
   const { t } = useTranslation();
   const [confirm, setConfirm] = useState(false);
@@ -55,9 +63,8 @@ export function AccountQuota({
         await consumeCodexRateLimitResetCredit(file, t);
       }
       if (!active.current) return;
-      await qolApi.refreshQuota(account.auth_index);
-      setMessage(t(reset ? 'qol.reset_accepted' : 'qol.refresh_queued'));
-      onChange();
+      await onRefresh(account.auth_index);
+      if (active.current) setMessage(t(reset ? 'qol.reset_accepted' : 'qol.refresh_done'));
     } catch (error) {
       setMessage(
         `${error instanceof Error ? error.message : String(error)}${reset ? ` · ${t('qol.reset_uncertain')}` : ''}`
@@ -84,21 +91,21 @@ export function AccountQuota({
                     : t('qol.pool_unknown')
                 }
               >
-                <span title={t('qol.requests')}>{u ? compact(u.requests) : '—'} req</span>
+                <span title={t('qol.requests')}>{u ? u.requests.toLocaleString() : '—'} req</span>
                 <span title={`${t('qol.total')}: ${u ? u.total.toLocaleString() : '—'}`}>
-                  {u ? compact(u.total) : '—'} tok
+                  {u ? formatTokens(u.total) : '—'} tok
                 </span>
-                <span title={t('qol.cost')}>API {money(u?.priced ? u.cost : null)}</span>
+                <span title={t('qol.used_cost')}>used {money(u?.priced ? u.cost : null)}</span>
                 <span
-                  title={`${t('qol.estimated_capacity')} · ${t('qol.cost_hint', { priced: u?.priced || 0, total: u?.requests || 0 })}`}
+                  title={`${t('qol.ptu_hint')} · ${t('qol.cost_hint', { priced: u?.priced || 0, total: u?.requests || 0 })}`}
                 >
-                  100% ≈ {money(u?.estimated_total)}
+                  ptu {money(u?.estimated_total)}
                   {u?.estimated_total != null && u.priced < u.requests
                     ? ` (${t('qol.partial')})`
                     : ''}
                 </span>
               </div>
-              <div className={styles.quotaLine}>
+              <div className={`${styles.quotaLine} ${styles[quotaTone(w.used_percent)]}`}>
                 <strong>{label}</strong>
                 <progress
                   max={100}
@@ -117,28 +124,30 @@ export function AccountQuota({
           );
         })}
       <div className={styles.actions}>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={busy || account.disabled}
+        <button
+          className={styles.textButton}
+          disabled={busy || refreshing || account.disabled}
           onClick={() => void run(false)}
         >
-          {t('qol.refresh')}
-        </Button>
-        <span title={q?.reset_credits_error || t('qol.reset_account_scope')}>
+          <IconRefreshCw size={13} />
+          {t(refreshing ? 'qol.refreshing' : 'qol.refresh')}
+        </button>
+        <span
+          title={`${t('qol.reset_account_scope')} ${t('qol.applicable_hint', { count: q?.applicable_reset_credits ?? '—' })}`}
+        >
           {t('qol.reset_counts', {
             total: q?.reset_credits ?? '—',
             applicable: q?.applicable_reset_credits ?? '—',
           })}
         </span>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={busy || waiting || account.disabled || !canResetQuota(q)}
+        <button
+          className={styles.textButton}
+          disabled={busy || refreshing || waiting || account.disabled || !canResetQuota(q)}
           onClick={() => setConfirm(true)}
         >
+          <IconTimer size={13} />
           {t('qol.reset_action')}
-        </Button>
+        </button>
       </div>
       <small>
         {t('qol.updated')}{' '}
@@ -166,7 +175,7 @@ export function AccountQuota({
           </>
         }
       >
-        <p>{t('qol.reset_confirm_body', { account: account.email || account.name })}</p>
+        <p>{t('qol.reset_confirm_body', { account: accountLabel(account) })}</p>
       </Modal>
     </div>
   );

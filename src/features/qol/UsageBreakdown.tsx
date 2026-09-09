@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Summary } from './api';
+import { formatTokens } from './display';
 import styles from './QolPage.module.scss';
 
 export function UsageBreakdown({
@@ -58,9 +59,9 @@ export function UsageBreakdown({
                 </td>
                 <td data-label={t('qol.requests')}>{row.requests.toLocaleString()}</td>
                 <td data-label={t('qol.failed')}>{row.failures.toLocaleString()}</td>
-                <td data-label={t('qol.tokens')}>{row.total.toLocaleString()}</td>
-                <td data-label={t('qol.cache_read')}>{row.cache_read.toLocaleString()}</td>
-                <td data-label={t('qol.cache_write')}>{row.cache_write.toLocaleString()}</td>
+                <td data-label={t('qol.tokens')}>{formatTokens(row.total)}</td>
+                <td data-label={t('qol.cache_read')}>{formatTokens(row.cache_read)}</td>
+                <td data-label={t('qol.cache_write')}>{formatTokens(row.cache_write)}</td>
                 <td data-label={t('qol.cache_hit')}>
                   {row.context ? `${((100 * row.cache_read) / row.context).toFixed(1)}%` : '—'}
                 </td>

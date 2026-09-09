@@ -54,7 +54,8 @@ describe('Codex catalog price synchronization', () => {
       modelNames: [], modelPrices: {}, onPricesChange: () => {},
     }));
     expect(html).toContain('models.dev');
-    expect(html).toContain(zh.monitor_custom.sync_codex);
+    expect(html).toContain(zh.monitor_custom.advanced_sync);
+    expect(html).not.toContain(zh.monitor_custom.sync_codex);
     const page = await Bun.file(new URL('../src/pages/MonitoringCenterPage.tsx', import.meta.url)).text();
     expect(page).toContain('aria-controls="monitor-model-prices"');
     expect(page.indexOf('<section id="monitor-model-prices"')).toBeLessThan(page.indexOf('<MonitorStatCards'));

@@ -83,6 +83,7 @@ export interface Account {
   provider: string;
   type: string;
   email: string;
+  display_name?: string;
   disabled: boolean;
   unavailable: boolean;
   status: string;
@@ -98,6 +99,11 @@ export type Filters = {
   result?: string;
 };
 const prefix = '/plugins/cpa-qol';
+export interface RefreshJob {
+  id: string;
+  completed: boolean;
+  errors: Record<string, string>;
+}
 export const qolApi = {
   summary: (params: Filters, signal: AbortSignal) =>
     apiClient.get<Summary>(`${prefix}/summary`, { params, signal }),
@@ -106,6 +112,25 @@ export const qolApi = {
   accounts: (signal: AbortSignal) => apiClient.get<Account[]>(`${prefix}/accounts`, { signal }),
   prices: (signal: AbortSignal) => apiClient.get<Prices>(`${prefix}/prices`, { signal }),
   savePrices: (prices: Prices) => apiClient.put<Prices>(`${prefix}/prices`, prices),
-  refreshQuota: (account?: string) =>
-    apiClient.post(`${prefix}/quota-refresh`, undefined, { params: { account } }),
+  models: (signal?: AbortSignal) => apiClient.get<string[]>(`${prefix}/models`, { signal }),
+  refreshQuota: (account?: string, signal?: AbortSignal) =>
+    apiClient.post<RefreshJob>(`${prefix}/quota-refresh`, undefined, {
+      params: { account },
+      signal,
+    }),
+  waitRefresh: (id: string, signal: AbortSignal) =>
+    apiClient.get<RefreshJob>(`${prefix}/quota-refresh`, {
+      params: { id },
+      signal,
+      timeout: 25000,
+    }),
 };
+
+export async function refreshAndWait(account: string | undefined, signal: AbortSignal) {
+  let job = await qolApi.refreshQuota(account, signal);
+  while (!job.completed) {
+    signal.throwIfAborted();
+    job = await qolApi.waitRefresh(job.id, signal);
+  }
+  return job;
+}

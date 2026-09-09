@@ -10,6 +10,9 @@ import {
   quotaLabel,
   relativeTimeRange,
   canResetQuota,
+  formatTokens,
+  quotaTone,
+  accountLabel,
 } from '../src/features/qol/display';
 import type { Account, Quota } from '../src/features/qol/api';
 
@@ -27,14 +30,44 @@ describe('CPA QoL contracts', () => {
       expect(Date.parse(range.end) - Date.parse(range.start)).toBe(days * 86400000);
     }
   });
-  test('reset credits require both a known available and applicable count', () => {
+  test('manual reset uses remaining credits, not upstream applicability hint', () => {
     expect(canResetQuota(undefined)).toBe(false);
-    expect(canResetQuota({ reset_credits: 3, applicable_reset_credits: 0 } as Quota)).toBe(false);
-    expect(canResetQuota({ reset_credits: 3 } as Quota)).toBe(false);
+    expect(canResetQuota({ reset_credits: 3, applicable_reset_credits: 0 } as Quota)).toBe(true);
+    expect(canResetQuota({ reset_credits: 3 } as Quota)).toBe(true);
     expect(canResetQuota({ reset_credits: 3, applicable_reset_credits: 1 } as Quota)).toBe(true);
     expect(
       canResetQuota({ reset_credits: 3, applicable_reset_credits: 1, error: 'HTTP 401' } as Quota)
-    ).toBe(false);
+    ).toBe(true);
+  });
+  test('compact units, quota severity and display names', () => {
+    expect(formatTokens(38400000)).toBe('38.40M');
+    expect(formatTokens(2500000000)).toBe('2.50B');
+    expect([59, 60, 84, 85].map(quotaTone)).toEqual(['low', 'medium', 'medium', 'high']);
+    expect(
+      accountLabel({
+        display_name: 'Pro One',
+        email: 'long@example.test',
+        name: 'a.json',
+      } as Account)
+    ).toBe('Pro One');
+  });
+  test('refresh waits for job completion before reading updated accounts', () => {
+    const hook = readFileSync(resolve('src/features/qol/useQuotaRefresh.ts'), 'utf8');
+    expect(hook.indexOf('await refreshAndWait')).toBeLessThan(
+      hook.indexOf('await qolApi.accounts')
+    );
+    expect(hook).toContain('job.errors');
+  });
+  test('price page uses server prices and session-only store', () => {
+    const page = readFileSync(resolve('src/features/qol/QolPage.tsx'), 'utf8');
+    expect(page).not.toContain('loadModelPrices');
+    expect(page).not.toContain('qol.import_prices');
+    const store = readFileSync(resolve('src/features/qol/priceStore.ts'), 'utf8');
+    expect(store).not.toContain('localStorage.setItem');
+    expect(store).toContain('useAuthStore.subscribe');
+    const card = readFileSync(resolve('src/components/usage/PriceSettingsCard.tsx'), 'utf8');
+    expect(card).not.toContain('handleSyncCodex');
+    expect(card).toContain('usedModelNames');
   });
   test('native sidebar routes render independent pages', () => {
     const routes = readFileSync(resolve('src/router/MainRoutes.tsx'), 'utf8');

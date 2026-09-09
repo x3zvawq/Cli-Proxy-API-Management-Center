@@ -20,11 +20,19 @@ export const relativeTimeRange = (days: number, now = Date.now()) => ({
   end: new Date(now).toISOString(),
 });
 
-export const canResetQuota = (quota: Quota | undefined) =>
-  (quota?.reset_credits ?? 0) > 0 &&
-  (quota?.applicable_reset_credits ?? 0) > 0 &&
-  !quota?.error &&
-  !quota?.reset_credits_error;
+export const canResetQuota = (quota: Quota | undefined) => (quota?.reset_credits ?? 0) > 0;
+
+export const accountLabel = (account: Account) =>
+  account.display_name || account.email || account.name;
+export const formatTokens = (value: number) =>
+  value >= 1e9
+    ? `${(value / 1e9).toFixed(2)}B`
+    : value >= 1e6
+      ? `${(value / 1e6).toFixed(2)}M`
+      : value >= 1e3
+        ? `${(value / 1e3).toFixed(1)}K`
+        : `${value}`;
+export const quotaTone = (used: number) => (used < 60 ? 'low' : used < 85 ? 'medium' : 'high');
 
 export const quotaWindowId = (window: Quota['windows'][number]) =>
   JSON.stringify([window.name, window.seconds]);
