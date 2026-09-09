@@ -12,10 +12,10 @@ import { ConfigPage } from '@/features/config/ConfigPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { useAuthStore } from '@/stores';
-import { QolPage } from '@/features/qol/QolPage';
+import { UsagePage } from '@/features/qol/QolPage';
 
 const createMainRoutes = (supportsPlugin: boolean) => [
-  { path: '/', element: supportsPlugin ? <Navigate to="/qol" replace /> : <DashboardPage /> },
+  { path: '/', element: supportsPlugin ? <Navigate to="/monitor" replace /> : <DashboardPage /> },
   { path: '/dashboard', element: <DashboardPage /> },
   { path: '/settings', element: <Navigate to="/config" replace /> },
   { path: '/api-keys', element: <Navigate to="/config" replace /> },
@@ -27,14 +27,15 @@ const createMainRoutes = (supportsPlugin: boolean) => [
   { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
   { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
   { path: '/oauth', element: <OAuthPage /> },
-  { path: '/quota', element: <Navigate to="/qol/accounts" replace /> },
-  { path: '/monitor', element: <Navigate to="/qol" replace /> },
-  { path: '/credential-center', element: <Navigate to="/qol/accounts" replace /> },
+  { path: '/credential-center', element: <Navigate to="/quota" replace /> },
   ...(supportsPlugin
     ? [
-        { path: '/qol', element: <QolPage /> },
-        { path: '/qol/accounts', element: <QolPage /> },
-        { path: '/qol/prices', element: <QolPage /> },
+        { path: '/monitor', element: <UsagePage view="monitor" /> },
+        { path: '/quota', element: <UsagePage view="accounts" /> },
+        { path: '/model-prices', element: <UsagePage view="prices" /> },
+        { path: '/qol', element: <Navigate to="/monitor" replace /> },
+        { path: '/qol/accounts', element: <Navigate to="/quota" replace /> },
+        { path: '/qol/prices', element: <Navigate to="/model-prices" replace /> },
         { path: '/plugin-pages/:pluginId/:menuIndex', element: <PluginResourcePage /> },
         { path: '/plugins', element: <PluginsPage /> },
         { path: '/plugin-store', element: <PluginStorePage /> },

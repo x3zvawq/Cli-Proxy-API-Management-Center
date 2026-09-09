@@ -1,5 +1,6 @@
 {
   "qol": {
+    "visible_quotas": "Visible quota windows",
     "title": "CPA QoL",
     "subtitle": "Usage insights and account overview",
     "monitor": "Statistics",

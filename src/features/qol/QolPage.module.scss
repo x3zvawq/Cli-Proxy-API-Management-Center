@@ -63,9 +63,45 @@
     margin: 8px 0 0;
   }
 }
-.tabs {
+.accountToolbar {
   display: flex;
-  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  label {
+    flex: 0 1 280px;
+  }
+  a {
+    padding: 8px 0;
+    font-size: 13px;
+  }
+}
+.page .quotaChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  margin: 16px 0 6px;
+  padding: 12px 0 0;
+  legend {
+    color: var(--text-secondary);
+    font-size: 13px;
+    padding-right: 8px;
+  }
+  label {
+    flex-direction: row;
+    align-items: center;
+    cursor: pointer;
+  }
+  input[type='checkbox'] {
+    min-height: 16px;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    accent-color: #4167b7;
+  }
 }
 .panel {
   background: var(--bg-primary);
@@ -238,10 +274,6 @@
 @media (max-width: 640px) {
   .page {
     gap: 14px;
-  }
-  .tabs > * {
-    flex: 1;
-    min-height: 44px;
   }
   .filters {
     gap: 10px;

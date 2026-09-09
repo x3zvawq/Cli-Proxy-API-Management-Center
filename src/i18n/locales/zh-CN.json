@@ -1,5 +1,6 @@
 {
   "qol": {
+    "visible_quotas": "显示的配额进度条",
     "title": "CPA QoL",
     "subtitle": "用量洞察与账号总览",
     "monitor": "使用统计",

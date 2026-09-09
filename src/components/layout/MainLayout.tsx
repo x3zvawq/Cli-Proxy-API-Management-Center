@@ -646,19 +646,9 @@ export function MainLayout() {
       id: 'observe',
       labelKey: 'nav_groups.observe',
       items: [
-        ...(supportsPlugin
-          ? [
-              {
-                path: '/qol',
-                labelKey: 'qol.title',
-                metaKey: 'qol.subtitle',
-                icon: sidebarIcons.monitoring,
-              },
-            ]
-          : []),
         {
           path: '/quota',
-          labelKey: 'nav.quota_management',
+          labelKey: 'qol.accounts',
           metaKey: 'nav_meta.quota_management',
           icon: sidebarIcons.quota,
         },
@@ -668,6 +658,14 @@ export function MainLayout() {
           metaKey: 'nav_meta.monitoring_center',
           icon: sidebarIcons.monitoring,
         },
+        ...(supportsPlugin
+          ? [{
+              path: '/model-prices',
+              labelKey: 'qol.prices',
+              metaKey: 'qol.prices_hint',
+              icon: sidebarIcons.config,
+            }]
+          : []),
         {
           path: '/logs',
           labelKey: 'nav.logs',
@@ -680,12 +678,6 @@ export function MainLayout() {
       id: 'control',
       labelKey: 'nav_groups.control',
       items: [
-        {
-          path: '/credential-center',
-          labelKey: 'nav.credential_center',
-          metaKey: 'nav_meta.credential_center',
-          icon: sidebarIcons.credentialCenter,
-        },
         {
           path: '/config',
           labelKey: 'nav.config_management',
@@ -1174,12 +1166,12 @@ export function MainLayout() {
       </header>
 
       {supportsPlugin && !isPluginResourcePage && (
-        <nav className="mobile-quick-nav" aria-label={t('qol.title')}>
-          <NavLink to="/qol" end>
+        <nav className="mobile-quick-nav" aria-label={t('nav.monitoring_center')}>
+          <NavLink to="/monitor" end>
             {sidebarIcons.monitoring}
             <span>{t('qol.monitor')}</span>
           </NavLink>
-          <NavLink to="/qol/accounts">
+          <NavLink to="/quota">
             {sidebarIcons.quota}
             <span>{t('qol.accounts')}</span>
           </NavLink>

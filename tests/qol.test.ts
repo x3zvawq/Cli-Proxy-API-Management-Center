@@ -1,8 +1,48 @@
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  keyPrefixes,
+  quotaOptions,
+  quotaWindowId,
+  readHiddenQuotas,
+} from '../src/features/qol/display';
+import type { Account } from '../src/features/qol/api';
 
 describe('CPA QoL contracts', () => {
+  test('native sidebar routes render independent pages', () => {
+    const routes = readFileSync(resolve('src/router/MainRoutes.tsx'), 'utf8');
+    for (const [path, view] of [
+      ['/monitor', 'monitor'],
+      ['/quota', 'accounts'],
+      ['/model-prices', 'prices'],
+    ])
+      expect(routes).toContain(`path: '${path}', element: <UsagePage view="${view}"`);
+    const page = readFileSync(resolve('src/features/qol/QolPage.tsx'), 'utf8');
+    expect(page).not.toContain('styles.tabs');
+    expect(page).not.toContain('<h1>CPA QoL');
+  });
+  test('key labels match stored SHA-256 and expose only the first six characters', async () => {
+    const raw = 'sk-abcdef-private-secret';
+    const result = await keyPrefixes([raw]);
+    const id = new Bun.CryptoHasher('sha256').update(raw).digest('hex');
+    expect(result[id]).toBe('sk-abc…');
+    expect(JSON.stringify(result)).not.toContain('private-secret');
+  });
+  test('quota choices merge by name and duration, independent of reset time', () => {
+    const first = { name: 'Codex', seconds: 18000, reset_at: 100, used_percent: 25 };
+    const second = { ...first, seconds: 604800 };
+    const accounts = [
+      { quota: { windows: [first, second] } },
+      { quota: { windows: [{ ...first, reset_at: 200 }] } },
+    ] as Account[];
+    expect(quotaOptions(accounts)).toHaveLength(2);
+    expect(quotaWindowId(first)).not.toBe(quotaWindowId(second));
+    expect(
+      readHiddenQuotas({ getItem: () => JSON.stringify([quotaWindowId(first)]) }, 'test')
+    ).toEqual([quotaWindowId(first)]);
+    expect(readHiddenQuotas({ getItem: () => 'broken' }, 'test')).toEqual([]);
+  });
   test('all QoL labels are present in all supported languages', () => {
     const locales = ['en', 'zh-CN', 'zh-TW', 'ru'].map(
       (locale) =>

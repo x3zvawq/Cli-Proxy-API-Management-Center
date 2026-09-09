@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -15,7 +15,7 @@ import { Line } from 'react-chartjs-2';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { PriceSettingsCard } from '@/components/usage/PriceSettingsCard';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useConfigStore } from '@/stores';
 import { authFilesApi } from '@/services/api/authFiles';
 import { toLocalDateTime } from '@/utils/monitorAnalytics';
 import { loadModelPrices, type ModelPrice } from '@/utils/usage';
@@ -31,6 +31,13 @@ import {
 } from './api';
 import styles from './QolPage.module.scss';
 import { RequestCards } from './RequestCards';
+import {
+  keyPrefixes,
+  quotaOptions,
+  quotaWindowId,
+  readHiddenQuotas,
+  type UsageView,
+} from './display';
 
 ChartJS.register(
   CategoryScale,
@@ -48,17 +55,43 @@ const initialRange = () => ({
   end: new Date().toISOString(),
 });
 
-export function QolPage() {
+export function UsagePage({ view }: { view: UsageView }) {
   // Remount on connection changes: no old account/key data survives a server switch.
   const base = useAuthStore((s) => s.apiBase);
   const key = useAuthStore((s) => s.managementKey);
-  return <QolWorkspace key={`${base}\0${key}`} />;
+  return <UsageWorkspace key={`${base}\0${key}\0${view}`} tab={view} base={base} />;
 }
 
-function QolWorkspace() {
+function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const tab = useLocation().pathname.split('/')[2] || 'monitor';
+  const configuredKeys = useConfigStore((state) => state.config?.apiKeys);
+  const [prefixes, setPrefixes] = useState<Record<string, string>>({});
+  const quotaStorageKey = `cpa-quota-hidden:${base}`;
+  const [hiddenQuotas, setHiddenQuotas] = useState(() =>
+    readHiddenQuotas(localStorage, quotaStorageKey)
+  );
+  useEffect(() => {
+    let active = true;
+    setPrefixes({});
+    void keyPrefixes(configuredKeys || [])
+      .then((value) => {
+        if (active) setPrefixes(value);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [configuredKeys]);
+  const keyLabel = (id: string, stored: string) => prefixes[id] || stored;
+  const toggleQuota = (id: string, visible: boolean) => {
+    const next = visible ? hiddenQuotas.filter((value) => value !== id) : [...hiddenQuotas, id];
+    setHiddenQuotas(next);
+    try {
+      localStorage.setItem(quotaStorageKey, JSON.stringify(next));
+    } catch {
+      /* Session preference still works when browser storage is disabled. */
+    }
+  };
   const [filters, setFilters] = useState<Filters>(initialRange);
   const [relativeRange, setRelativeRange] = useState(true);
   const [draft, setDraft] = useState(() => ({
@@ -220,37 +253,34 @@ function QolWorkspace() {
       setPrices(await qolApi.savePrices(merged));
     });
   const totals = summary?.totals;
+  const availableQuotas = quotaOptions(accounts);
 
   return (
     <div className={styles.page}>
       <header className={styles.heading}>
         <div>
-          <h1>CPA QoL</h1>
-          <p>{t('qol.subtitle')}</p>
+          <h1>{t(tab === 'monitor' ? 'nav.monitoring_center' : `qol.${tab}`)}</h1>
         </div>
-        <Button disabled={busy} onClick={() => {
-          if (relativeRange && tab === 'monitor') {
-            const range = initialRange();
-            setFilters((f) => ({ ...f, ...range }));
-            setDraft({ start: toLocalDateTime(Date.parse(range.start)), end: toLocalDateTime(Date.parse(range.end)) });
-            setPage(1);
-          }
-          setRevision((v) => v + 1);
-        }}>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => {
+            if (relativeRange && tab === 'monitor') {
+              const range = initialRange();
+              setFilters((f) => ({ ...f, ...range }));
+              setDraft({
+                start: toLocalDateTime(Date.parse(range.start)),
+                end: toLocalDateTime(Date.parse(range.end)),
+              });
+              setPage(1);
+            }
+            setRevision((v) => v + 1);
+          }}
+        >
           {t('qol.refresh')}
         </Button>
       </header>
-      <nav className={styles.tabs} aria-label="CPA QoL">
-        {['monitor', 'accounts', 'prices'].map((id) => (
-          <Button
-            key={id}
-            variant={tab === id ? 'primary' : 'secondary'}
-            onClick={() => navigate(id === 'monitor' ? '/qol' : `/qol/${id}`)}
-          >
-            {t(`qol.${id}`)}
-          </Button>
-        ))}
-      </nav>
       {error && (
         <div role="alert" className={styles.error}>
           {error}
@@ -299,7 +329,7 @@ function QolWorkspace() {
                 <option value="">{t('qol.all')}</option>
                 {keyOptions.map((k) => (
                   <option key={k.id} value={k.id}>
-                    {k.label} · {k.id.slice(0, 6)}
+                    {keyLabel(k.id, k.label)}
                   </option>
                 ))}
               </select>
@@ -394,9 +424,7 @@ function QolWorkspace() {
             <div className={styles.keyGrid}>
               {summary?.keys.map((k) => (
                 <article key={k.id}>
-                  <strong>
-                    {k.label} · {k.id.slice(0, 6)}
-                  </strong>
+                  <strong>{keyLabel(k.id, k.label)}</strong>
                   <span>
                     {number(k.requests)} {t('qol.requests')}
                   </span>
@@ -410,7 +438,12 @@ function QolWorkspace() {
           </section>
           <section className={styles.panel}>
             <h2>{t('qol.requests')}</h2>
-            <RequestCards rows={requests?.items || []} names={names} onDetail={setDetail} />
+            <RequestCards
+              rows={requests?.items || []}
+              names={names}
+              keyLabel={keyLabel}
+              onDetail={setDetail}
+            />
             <div className={`${styles.tableWrap} ${styles.desktopRequests}`}>
               <table className={styles.table}>
                 <thead>
@@ -438,10 +471,7 @@ function QolWorkspace() {
                         {r.model}
                         <small>{r.executor || t('qol.unknown')}</small>
                       </td>
-                      <td data-label={t('qol.key')}>
-                        {r.key_label}
-                        <small>{r.key.slice(0, 6)}</small>
-                      </td>
+                      <td data-label={t('qol.key')}>{keyLabel(r.key, r.key_label)}</td>
                       <td data-label={t('qol.tokens')}>
                         <button className={styles.tokenButton} onClick={() => setDetail(r)}>
                           ↑ {number(r.context)} / ↓ {number(r.output)}
@@ -494,17 +524,37 @@ function QolWorkspace() {
       )}
       {tab === 'accounts' && (
         <section className={styles.panel}>
-          <div className={styles.heading}>
+          <div className={styles.accountToolbar}>
             <label>
               {t('qol.search')}
               <input value={query} onChange={(e) => setQuery(e.target.value)} />
             </label>
-            <Button disabled={busy} onClick={() => void mutate(qolApi.refreshQuota)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void mutate(qolApi.refreshQuota)}
+            >
               {t('qol.refresh_quota')}
             </Button>
             <Link to="/auth-files">{t('qol.manage_files')}</Link>
           </div>
           <p className={styles.hint}>{t('qol.quota_hint')}</p>
+          {availableQuotas.length > 0 && (
+            <fieldset className={styles.quotaChoices}>
+              <legend>{t('qol.visible_quotas')}</legend>
+              {availableQuotas.map((option) => (
+                <label key={option.id}>
+                  <input
+                    type="checkbox"
+                    checked={!hiddenQuotas.includes(option.id)}
+                    onChange={(event) => toggleQuota(option.id, event.target.checked)}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </fieldset>
+          )}
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
@@ -527,22 +577,24 @@ function QolWorkspace() {
                     <td data-label={t('qol.plan')}>{a.quota?.plan || '—'}</td>
                     <td data-label={t('qol.quota')}>
                       <div>
-                        {a.quota?.windows.map((w, i) => (
-                          <div className={styles.quotaWindow} key={`${w.name}-${i}`}>
-                            <span>
-                              {w.name} · {w.seconds / 3600}h · {w.used_percent.toFixed(1)}%
-                            </span>
-                            <progress
-                              aria-label={`${w.name} ${t('qol.used')}`}
-                              max={100}
-                              value={w.used_percent}
-                            />
-                            <small>
-                              {t('qol.reset')}{' '}
-                              {w.reset_at ? new Date(w.reset_at * 1000).toLocaleString() : '—'}
-                            </small>
-                          </div>
-                        ))}
+                        {a.quota?.windows
+                          .filter((w) => !hiddenQuotas.includes(quotaWindowId(w)))
+                          .map((w, i) => (
+                            <div className={styles.quotaWindow} key={`${w.name}-${i}`}>
+                              <span>
+                                {w.name} · {w.seconds / 3600}h · {w.used_percent.toFixed(1)}%
+                              </span>
+                              <progress
+                                aria-label={`${w.name} ${t('qol.used')}`}
+                                max={100}
+                                value={w.used_percent}
+                              />
+                              <small>
+                                {t('qol.reset')}{' '}
+                                {w.reset_at ? new Date(w.reset_at * 1000).toLocaleString() : '—'}
+                              </small>
+                            </div>
+                          ))}
                         <small>
                           {t('qol.updated')}{' '}
                           {a.quota?.updated_at
@@ -562,6 +614,8 @@ function QolWorkspace() {
                     </td>
                     <td data-label={t('qol.actions')}>
                       <Button
+                        size="sm"
+                        variant="secondary"
                         disabled={busy}
                         onClick={() =>
                           void mutate(() => authFilesApi.setStatus(a.name, !a.disabled))
