@@ -30,8 +30,8 @@ import {
   type Summary,
 } from './api';
 import styles from './QolPage.module.scss';
-import { RequestCards } from './RequestCards';
-import { RequestTokens, RequestCost, RequestTiming, RequestTransport } from './RequestMetrics';
+import { RequestTable } from './RequestTable';
+import { requestColumns, defaultColumns, selectedFields } from './requestColumns';
 import { compactMoney, accountRates } from './metricFormatting';
 import { QuotaColumnMenu } from './QuotaColumnMenu';
 import { AccountQuota } from './AccountQuota';
@@ -126,6 +126,61 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   const [loading, setLoading] = useState(false);
   const [accountSummary, setAccountSummary] = useState<Summary | null>(null);
   const [query, setQuery] = useState('');
+  const [columns, setColumns] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(
+        localStorage.getItem(`cpa-request-columns:${base}`) || 'null'
+      );
+      if (Array.isArray(saved)) {
+        const valid = requestColumns.filter((c) => saved.includes(c.id)).map((c) => c.id);
+        if (valid.length) return valid;
+      }
+    } catch {
+      /* Use defaults for an absent or invalid preference. */
+    }
+    return defaultColumns;
+  });
+  const fields = selectedFields(columns);
+  const toggleColumn = (id: string, visible: boolean) => {
+    const next = visible ? [...columns, id] : columns.filter((c) => c !== id);
+    if (!next.length) return;
+    setColumns(next);
+    try {
+      localStorage.setItem(`cpa-request-columns:${base}`, JSON.stringify(next));
+    } catch {
+      /* Session preference remains usable. */
+    }
+  };
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'monitor') return;
+    const refresh = () => {
+      if (document.hidden || loading || summaryLoading) return;
+      // Freeze pagination and custom ranges; only a live first page follows now.
+      if (relativeDays !== null && page === 1) {
+        const range = relativeTimeRange(relativeDays);
+        setDraft((current) =>
+          current.start === toLocalDateTime(Date.parse(filters.start)) &&
+          current.end === toLocalDateTime(Date.parse(filters.end))
+            ? {
+                start: toLocalDateTime(Date.parse(range.start)),
+                end: toLocalDateTime(Date.parse(range.end)),
+              }
+            : current
+        );
+        setFilters((current) => ({ ...current, ...range }));
+      } else {
+        setRevision((value) => value + 1);
+      }
+    };
+    const timer = window.setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [tab, relativeDays, page, loading, summaryLoading, filters.start, filters.end]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -163,7 +218,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   useEffect(() => {
     if (tab !== 'monitor') return;
     const controller = new AbortController();
-    setSummary(null);
+    setSummaryLoading(true);
     void qolApi
       .summary(filters, controller.signal)
       .then((value) => {
@@ -179,6 +234,9 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       })
       .catch((e: Error) => {
         if (!controller.signal.aborted) setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSummaryLoading(false);
       });
     return () => controller.abort();
   }, [filters, revision, tab]);
@@ -187,10 +245,9 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
     if (tab !== 'monitor') return;
     const controller = new AbortController();
     setLoading(true);
-    setRequests(null);
     setError('');
     void qolApi
-      .requests({ ...filters, page, page_size: 50 }, controller.signal)
+      .requests({ ...filters, page, page_size: 50, fields }, controller.signal)
       .then((value) => {
         if (!controller.signal.aborted) setRequests(value);
       })
@@ -201,7 +258,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [filters, page, revision, tab]);
+  }, [filters, page, revision, tab, fields]);
 
   useEffect(() => {
     if (tab !== 'accounts' || quotaRefreshing) return;
@@ -509,67 +566,23 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           </section>
           <UsageBreakdown summary={summary} names={names} keyLabel={keyLabel} />
           <section className={styles.panel}>
-            <h2>{t('qol.request_details')}</h2>
-            <RequestCards rows={requests?.items || []} names={names} keyLabel={keyLabel} />
-            <div className={`${styles.tableWrap} ${styles.desktopRequests}`}>
-              <table className={`${styles.table} ${styles.requestTable}`}>
-                <thead>
-                  <tr>
-                    {[
-                      'time',
-                      'model',
-                      'key',
-                      'tokens',
-                      'timing',
-                      'tier',
-                      'cost',
-                      'accounts',
-                      'result',
-                    ].map((id) => (
-                      <th key={id}>{t(`qol.${id}`)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests?.items.map((r) => (
-                    <tr key={r.id}>
-                      <td data-label={t('qol.time')}>
-                        <strong>{new Date(r.timestamp).toLocaleTimeString()}</strong>
-                        <small>{new Date(r.timestamp).toLocaleDateString()}</small>
-                      </td>
-                      <td data-label={t('qol.model')}>
-                        <strong>{r.model}</strong>
-                        <small>
-                          <RequestTransport row={r} />
-                        </small>
-                      </td>
-                      <td data-label={t('qol.key')}>{keyLabel(r.key, r.key_label)}</td>
-                      <td data-label={t('qol.tokens')}>
-                        <RequestTokens row={r} />
-                      </td>
-                      <td data-label={t('qol.timing')}>
-                        <RequestTiming row={r} />
-                      </td>
-                      <td data-label={t('qol.tier')}>
-                        {r.tier || '—'}
-                        <small>{r.thinking || '—'}</small>
-                      </td>
-                      <td data-label={t('qol.cost')}>
-                        <RequestCost row={r} />
-                      </td>
-                      <td data-label={t('qol.accounts')}>
-                        {names.get(r.account) || r.account || '—'}
-                      </td>
-                      <td data-label={t('qol.result')}>
-                        <span className={r.failed ? styles.failedBadge : styles.successBadge}>
-                          {t(r.failed ? 'qol.failed' : 'qol.success')}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className={styles.breakdownHeading}>
+              <h2>{t('qol.request_details')}</h2>
+              <QuotaColumnMenu
+                label={t('qol.visible_columns')}
+                title={t('qol.visible_columns')}
+                options={requestColumns.map((c) => ({ id: c.id, label: t(`qol.${c.id}`) }))}
+                hidden={requestColumns.filter((c) => !columns.includes(c.id)).map((c) => c.id)}
+                disabled={columns.length === 1 ? columns : []}
+                onToggle={toggleColumn}
+              />
             </div>
+            <RequestTable
+              rows={requests?.items || []}
+              columns={columns}
+              names={names}
+              keyLabel={keyLabel}
+            />
             {!loading && !requests?.items.length && <p>{t('qol.empty')}</p>}
             <footer className={styles.pagination}>
               <Button disabled={page <= 1 || loading} onClick={() => setPage(page - 1)}>

@@ -41,14 +41,14 @@
 .timing {
   display: grid;
   gap: 4px;
-  min-width: 92px;
+  min-width: 80px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   > span {
     white-space: nowrap;
     display: flex;
     justify-content: space-between;
-    gap: 10px;
+    gap: 6px;
   }
   em {
     font-style: normal;

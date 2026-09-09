@@ -119,9 +119,9 @@ describe('CPA QoL contracts', () => {
     expect(page).toContain('controller.abort()');
   });
   test('mobile details use native keyboard-accessible disclosure and masked keys', () => {
-    const cards = readFileSync(resolve('src/features/qol/RequestCards.tsx'), 'utf8');
+    const cards = readFileSync(resolve('src/features/qol/RequestTable.tsx'), 'utf8');
     expect(cards).toContain('<summary>');
-    expect(cards).toContain('r.key_label');
+    expect(readFileSync(resolve('src/features/qol/RequestCell.tsx'), 'utf8')).toContain('r.key_label');
     expect(cards).not.toContain('api_key');
   });
 });

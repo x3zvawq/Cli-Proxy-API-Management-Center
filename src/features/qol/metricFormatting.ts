@@ -1,5 +1,6 @@
 import { resolvePriceForContext } from '@/utils/usage';
 import type { Prices, RequestRow, Totals } from './api';
+import type { costFields } from './requestColumns';
 
 export function compactMoney(value: number | null | undefined) {
   if (value == null) return '—';
@@ -32,7 +33,10 @@ export function accountRates(
 }
 
 // QoL already normalizes input to non-cached tokens; do not subtract cached tokens again.
-export function requestCostParts(row: RequestRow, prices: Prices) {
+export function requestCostParts(
+  row: Pick<RequestRow, (typeof costFields)[number]>,
+  prices: Prices
+) {
   const price = prices[row.model];
   if (!price || row.cost === null) return null;
   const rates = resolvePriceForContext(price, row.context);

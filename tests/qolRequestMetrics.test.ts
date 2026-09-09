@@ -66,7 +66,8 @@ describe('QoL request presentation', () => {
     expect(page).not.toContain('setDetail');
     expect(page).not.toContain('qol.quota_hint');
     expect(page).toContain('qol.request_details');
-    expect(page.indexOf("'timing',")).toBeLessThan(page.indexOf("'tier',"));
+    const columns = readFileSync('src/features/qol/requestColumns.ts', 'utf8');
+    expect(columns.indexOf("id: 'timing'")).toBeLessThan(columns.indexOf("id: 'tier'"));
     for (const file of ['useQuotaRefresh.ts', 'AccountQuota.tsx']) expect(readFileSync('src/features/qol/' + file, 'utf8')).not.toContain('qol.refresh_done');
   });
 });

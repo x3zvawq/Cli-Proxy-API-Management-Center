@@ -7,10 +7,16 @@ export function QuotaColumnMenu({
   options,
   hidden,
   onToggle,
+  label,
+  title,
+  disabled = [],
 }: {
   options: { id: string; label: string }[];
   hidden: string[];
   onToggle: (id: string, visible: boolean) => void;
+  label?: string;
+  title?: string;
+  disabled?: string[];
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -20,7 +26,7 @@ export function QuotaColumnMenu({
       <button
         className={styles.trigger}
         popoverTarget={id}
-        aria-label={t('qol.visible_quotas')}
+        aria-label={title || t('qol.visible_quotas')}
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
           if (!menu.current) return;
@@ -28,15 +34,16 @@ export function QuotaColumnMenu({
           menu.current.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 280))}px`;
         }}
       >
-        {t('qol.quota')} <IconChevronDown size={14} />
+        {label || t('qol.quota')} <IconChevronDown size={14} />
       </button>
       <div id={id} ref={menu} popover="auto" className={styles.menu}>
-        <strong>{t('qol.visible_quotas')}</strong>
+        <strong>{title || t('qol.visible_quotas')}</strong>
         {options.map((option) => (
           <label key={option.id}>
             <input
               type="checkbox"
               checked={!hidden.includes(option.id)}
+              disabled={disabled.includes(option.id)}
               onChange={(event) => onToggle(option.id, event.target.checked)}
             />
             {option.label}

@@ -52,9 +52,19 @@ export interface RequestRow {
   tier: string;
   thinking: string;
   cost: number | null;
+  alias: string | null;
+  source: string | null;
+  auth_id: string | null;
+  auth_type: string | null;
+  session_id: string | null;
+  parent_session_id: string | null;
+  failure_status_code: number | null;
+  failure_body: string | null;
+  raw_tokens: Record<string, number> | null;
 }
+export type ProjectedRequest = Pick<RequestRow, 'id'> & Partial<RequestRow>;
 export interface RequestPage {
-  items: RequestRow[];
+  items: ProjectedRequest[];
   total: number;
   page: number;
   page_size: number;
@@ -107,8 +117,10 @@ export interface RefreshJob {
 export const qolApi = {
   summary: (params: Filters, signal: AbortSignal) =>
     apiClient.get<Summary>(`${prefix}/summary`, { params, signal }),
-  requests: (params: Filters & { page: number; page_size: number }, signal: AbortSignal) =>
-    apiClient.get<RequestPage>(`${prefix}/requests`, { params, signal }),
+  requests: (
+    params: Filters & { page: number; page_size: number; fields?: string },
+    signal: AbortSignal
+  ) => apiClient.get<RequestPage>(`${prefix}/requests`, { params, signal }),
   accounts: (signal: AbortSignal) => apiClient.get<Account[]>(`${prefix}/accounts`, { signal }),
   prices: (signal: AbortSignal) => apiClient.get<Prices>(`${prefix}/prices`, { signal }),
   savePrices: (prices: Prices) => apiClient.put<Prices>(`${prefix}/prices`, prices),

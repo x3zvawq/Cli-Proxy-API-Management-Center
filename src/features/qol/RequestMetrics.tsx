@@ -7,8 +7,9 @@ import { formatTokens } from './display';
 import { useQolPriceStore } from './priceStore';
 import { compactMoney, requestCostParts, requestTiming } from './metricFormatting';
 import styles from './RequestMetrics.module.scss';
+import { costFields, tokenFields, timingFields } from './requestColumns';
 
-export function RequestTransport({ row }: { row: RequestRow }) {
+export function RequestTransport({ row }: { row: Pick<RequestRow, 'executor'> }) {
   const { t } = useTranslation();
   const transport = requestUpstreamTransport(row.executor);
   return (
@@ -21,7 +22,7 @@ export function RequestTransport({ row }: { row: RequestRow }) {
   );
 }
 
-export function RequestTokens({ row }: { row: RequestRow }) {
+export function RequestTokens({ row }: { row: Pick<RequestRow, (typeof tokenFields)[number]> }) {
   const { t } = useTranslation();
   return (
     <HoverDetails
@@ -58,7 +59,7 @@ export function RequestTokens({ row }: { row: RequestRow }) {
   );
 }
 
-export function RequestCost({ row }: { row: RequestRow }) {
+export function RequestCost({ row }: { row: Pick<RequestRow, (typeof costFields)[number]> }) {
   const { t } = useTranslation();
   const prices = useQolPriceStore((state) => state.prices);
   const details = requestCostParts(row, prices);
@@ -102,7 +103,7 @@ export function RequestCost({ row }: { row: RequestRow }) {
   );
 }
 
-export function RequestTiming({ row }: { row: RequestRow }) {
+export function RequestTiming({ row }: { row: Pick<RequestRow, (typeof timingFields)[number]> }) {
   const { t } = useTranslation();
   const values = requestTiming(row);
   return (

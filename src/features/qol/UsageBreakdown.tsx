@@ -21,14 +21,24 @@ export function UsageBreakdown({
     <section className={styles.panel}>
       <div className={styles.breakdownHeading}>
         <h2>{t('qol.breakdown')}</h2>
-        <label>
-          {t('qol.group_by')}
-          <select value={group} onChange={(e) => setGroup(e.target.value as typeof group)}>
-            <option value="keys">{t('qol.key')}</option>
-            <option value="models">{t('qol.model')}</option>
-            <option value="accounts">{t('qol.upstream_account')}</option>
-          </select>
-        </label>
+        <div className={styles.groupRadios} role="radiogroup" aria-label={t('qol.group_by')}>
+          {(['keys', 'models', 'accounts'] as const).map((id) => (
+            <label key={id}>
+              <input
+                type="radio"
+                name="usage-group"
+                value={id}
+                checked={group === id}
+                onChange={() => setGroup(id)}
+              />
+              <span>
+                {t(
+                  id === 'keys' ? 'qol.key' : id === 'models' ? 'qol.model' : 'qol.upstream_account'
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>

@@ -23,7 +23,11 @@
     summary strong {
       overflow-wrap: anywhere;
     }
+    summary > span {
+      min-width: 0;
+    }
     summary small {
+      display: block;
       grid-column: 1 / -1;
       color: var(--text-secondary);
     }
@@ -79,6 +83,7 @@
 }
 .breakdownHeading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -86,6 +91,64 @@
   h2 {
     margin: 0;
   }
+}
+.groupRadios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  label {
+    position: relative;
+    cursor: pointer;
+  }
+  input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+  span {
+    display: block;
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+  }
+  input:checked + span {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 1px 4px #0001;
+  }
+  input:focus-visible + span {
+    outline: 2px solid var(--primary-color);
+  }
+}
+.requestTable .timingColumn {
+  width: 1%;
+  white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.metadataText {
+  display: inline-block;
+  max-width: 230px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 12px;
+}
+.requestTable th.timingColumn {
+  white-space: normal;
+  min-width: 80px;
+  max-width: 100px;
+}
+.failureBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow-y: auto;
+  font: inherit;
 }
 .accountTable td:nth-child(5) {
   max-width: 470px;
@@ -123,6 +186,7 @@
 }
 .requestTable {
   font-variant-numeric: tabular-nums;
+  th, td { white-space: nowrap; }
   tbody tr {
     transition: background 120ms;
   }
