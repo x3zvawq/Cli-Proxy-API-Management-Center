@@ -416,7 +416,7 @@ const createCodexRedeemRequestId = (): string => {
   });
 };
 
-const consumeCodexRateLimitResetCredit = async (
+export const consumeCodexRateLimitResetCredit = async (
   file: AuthFileItem,
   t: TFunction
 ): Promise<void> => {

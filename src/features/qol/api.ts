@@ -65,7 +65,16 @@ export interface Quota {
   attempt_at: string;
   error?: string;
   proxy: string;
-  windows: { name: string; used_percent: number; seconds: number; reset_at: number }[];
+  reset_credits?: number | null;
+  applicable_reset_credits?: number | null;
+  reset_credits_error?: string;
+  windows: {
+    name: string;
+    used_percent: number;
+    seconds: number;
+    reset_at: number;
+    usage?: Totals & { start: string; end: string; estimated_total: number | null };
+  }[];
 }
 export interface Account {
   id: string;
@@ -97,5 +106,6 @@ export const qolApi = {
   accounts: (signal: AbortSignal) => apiClient.get<Account[]>(`${prefix}/accounts`, { signal }),
   prices: (signal: AbortSignal) => apiClient.get<Prices>(`${prefix}/prices`, { signal }),
   savePrices: (prices: Prices) => apiClient.put<Prices>(`${prefix}/prices`, prices),
-  refreshQuota: () => apiClient.post(`${prefix}/quota-refresh`),
+  refreshQuota: (account?: string) =>
+    apiClient.post(`${prefix}/quota-refresh`, undefined, { params: { account } }),
 };

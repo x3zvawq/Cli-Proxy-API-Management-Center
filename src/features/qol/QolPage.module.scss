@@ -77,6 +77,22 @@
     font-size: 13px;
   }
 }
+.breakdownHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  h2 {
+    margin: 0;
+  }
+}
+.accountTable td:nth-child(4) {
+  max-width: 470px;
+}
+.quotaHeader {
+  min-width: 300px;
+}
 .page .quotaChoices {
   display: flex;
   flex-wrap: wrap;
@@ -343,6 +359,32 @@
   }
   .tokenButton {
     min-height: 44px;
+  }
+  .accountTable {
+    thead {
+      display: block;
+    }
+    thead tr {
+      border: 0;
+      padding: 0;
+      margin-bottom: 8px;
+    }
+    th {
+      display: none;
+    }
+    .quotaHeader {
+      display: block;
+      min-width: 0;
+      border: 0;
+      padding: 0;
+    }
+    td:nth-child(4) {
+      display: block;
+      max-width: none;
+    }
+    td:nth-child(4)::before {
+      display: none;
+    }
   }
   .keyGrid {
     grid-template-columns: 1fr 1fr;

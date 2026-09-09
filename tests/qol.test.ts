@@ -6,10 +6,36 @@ import {
   quotaOptions,
   quotaWindowId,
   readHiddenQuotas,
+  quotaDuration,
+  quotaLabel,
+  relativeTimeRange,
+  canResetQuota,
 } from '../src/features/qol/display';
-import type { Account } from '../src/features/qol/api';
+import type { Account, Quota } from '../src/features/qol/api';
 
 describe('CPA QoL contracts', () => {
+  test('quota periods are compact and quota pools remain distinguishable', () => {
+    expect(quotaDuration(604800)).toBe('7d');
+    expect(quotaDuration(18000)).toBe('5h');
+    expect(
+      quotaLabel({ name: 'GPT-5.3-Codex-Spark', seconds: 604800, reset_at: 0, used_percent: 1 })
+    ).toBe('spark-7d');
+  });
+  test('quick ranges retain their duration on refresh', () => {
+    for (const days of [1, 7, 30]) {
+      const range = relativeTimeRange(days, Date.parse('2026-09-09T00:00:00Z'));
+      expect(Date.parse(range.end) - Date.parse(range.start)).toBe(days * 86400000);
+    }
+  });
+  test('reset credits require both a known available and applicable count', () => {
+    expect(canResetQuota(undefined)).toBe(false);
+    expect(canResetQuota({ reset_credits: 3, applicable_reset_credits: 0 } as Quota)).toBe(false);
+    expect(canResetQuota({ reset_credits: 3 } as Quota)).toBe(false);
+    expect(canResetQuota({ reset_credits: 3, applicable_reset_credits: 1 } as Quota)).toBe(true);
+    expect(
+      canResetQuota({ reset_credits: 3, applicable_reset_credits: 1, error: 'HTTP 401' } as Quota)
+    ).toBe(false);
+  });
   test('native sidebar routes render independent pages', () => {
     const routes = readFileSync(resolve('src/router/MainRoutes.tsx'), 'utf8');
     for (const [path, view] of [

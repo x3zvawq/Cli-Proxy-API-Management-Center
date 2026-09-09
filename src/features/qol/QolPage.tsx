@@ -31,10 +31,13 @@ import {
 } from './api';
 import styles from './QolPage.module.scss';
 import { RequestCards } from './RequestCards';
+import { QuotaColumnMenu } from './QuotaColumnMenu';
+import { AccountQuota } from './AccountQuota';
+import { UsageBreakdown } from './UsageBreakdown';
 import {
   keyPrefixes,
   quotaOptions,
-  quotaWindowId,
+  relativeTimeRange,
   readHiddenQuotas,
   type UsageView,
 } from './display';
@@ -50,10 +53,7 @@ ChartJS.register(
 );
 const number = (value: number) => value.toLocaleString();
 const money = (value: number | null) => (value === null ? '—' : `$${value.toFixed(5)}`);
-const initialRange = () => ({
-  start: new Date(Date.now() - 86400000).toISOString(),
-  end: new Date().toISOString(),
-});
+const initialRange = () => relativeTimeRange(1);
 
 export function UsagePage({ view }: { view: UsageView }) {
   // Remount on connection changes: no old account/key data survives a server switch.
@@ -93,7 +93,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
     }
   };
   const [filters, setFilters] = useState<Filters>(initialRange);
-  const [relativeRange, setRelativeRange] = useState(true);
+  const [relativeDays, setRelativeDays] = useState<number | null>(1);
   const [draft, setDraft] = useState(() => ({
     start: toLocalDateTime(Date.parse(filters.start)),
     end: toLocalDateTime(Date.parse(filters.end)),
@@ -218,7 +218,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       return;
     }
     setPage(1);
-    setRelativeRange(false);
+    setRelativeDays(null);
     setFilters((f) => ({ ...f, start: start.toISOString(), end: end.toISOString() }));
   };
   const names = useMemo(
@@ -266,8 +266,8 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           variant="secondary"
           disabled={busy}
           onClick={() => {
-            if (relativeRange && tab === 'monitor') {
-              const range = initialRange();
+            if (relativeDays !== null && tab === 'monitor') {
+              const range = relativeTimeRange(relativeDays);
               setFilters((f) => ({ ...f, ...range }));
               setDraft({
                 start: toLocalDateTime(Date.parse(range.start)),
@@ -306,20 +306,27 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
               />
             </label>
             <Button onClick={applyRange}>{t('qol.apply')}</Button>
-            <Button
-              onClick={() => {
-                const next = initialRange();
-                setRelativeRange(true);
-                setFilters(next);
-                setDraft({
-                  start: toLocalDateTime(Date.parse(next.start)),
-                  end: toLocalDateTime(Date.parse(next.end)),
-                });
-                setPage(1);
-              }}
-            >
-              {t('qol.day')}
-            </Button>
+            {[1, 7, 30].map((days) => (
+              <Button
+                key={days}
+                size="sm"
+                variant={relativeDays === days ? 'primary' : 'secondary'}
+                onClick={() => {
+                  const next = relativeTimeRange(days);
+                  setRelativeDays(days);
+                  setFilters((f) => ({ ...f, ...next }));
+                  setDraft({
+                    start: toLocalDateTime(Date.parse(next.start)),
+                    end: toLocalDateTime(Date.parse(next.end)),
+                  });
+                  setPage(1);
+                }}
+              >
+                {t(days === 1 ? 'qol.day' : days === 7 ? 'qol.week' : 'qol.month')}
+              </Button>
+            ))}
+          </section>
+          <section className={styles.filters} aria-label={t('qol.request_filters')}>
             <label>
               {t('qol.key')}
               <select
@@ -419,23 +426,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
               />
             </div>
           </section>
-          <section className={styles.panel}>
-            <h2>{t('qol.key_usage')}</h2>
-            <div className={styles.keyGrid}>
-              {summary?.keys.map((k) => (
-                <article key={k.id}>
-                  <strong>{keyLabel(k.id, k.label)}</strong>
-                  <span>
-                    {number(k.requests)} {t('qol.requests')}
-                  </span>
-                  <span>
-                    {money(k.cost)} · {number(k.total)} tokens
-                  </span>
-                </article>
-              ))}
-            </div>
-            {summary?.groups_truncated && <p>{t('qol.truncated')}</p>}
-          </section>
+          <UsageBreakdown summary={summary} names={names} keyLabel={keyLabel} />
           <section className={styles.panel}>
             <h2>{t('qol.requests')}</h2>
             <RequestCards
@@ -540,28 +531,29 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
             <Link to="/auth-files">{t('qol.manage_files')}</Link>
           </div>
           <p className={styles.hint}>{t('qol.quota_hint')}</p>
-          {availableQuotas.length > 0 && (
-            <fieldset className={styles.quotaChoices}>
-              <legend>{t('qol.visible_quotas')}</legend>
-              {availableQuotas.map((option) => (
-                <label key={option.id}>
-                  <input
-                    type="checkbox"
-                    checked={!hiddenQuotas.includes(option.id)}
-                    onChange={(event) => toggleQuota(option.id, event.target.checked)}
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </fieldset>
-          )}
+          <details className={styles.hint}>
+            <summary>
+              {t('qol.cycle_snapshot')} · {t('qol.estimated_capacity')}
+            </summary>
+            <p>{t('qol.estimate_hint')}</p>
+          </details>
           <div className={styles.tableWrap}>
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.accountTable}`}>
               <thead>
                 <tr>
                   {['accounts', 'provider', 'plan', 'quota', 'proxy', 'status', 'actions'].map(
                     (id) => (
-                      <th key={id}>{t(`qol.${id}`)}</th>
+                      <th key={id} className={id === 'quota' ? styles.quotaHeader : undefined}>
+                        {id === 'quota' ? (
+                          <QuotaColumnMenu
+                            options={availableQuotas}
+                            hidden={hiddenQuotas}
+                            onToggle={toggleQuota}
+                          />
+                        ) : (
+                          t(`qol.${id}`)
+                        )}
+                      </th>
                     )
                   )}
                 </tr>
@@ -576,37 +568,11 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                     <td data-label={t('qol.provider')}>{a.provider || a.type}</td>
                     <td data-label={t('qol.plan')}>{a.quota?.plan || '—'}</td>
                     <td data-label={t('qol.quota')}>
-                      <div>
-                        {a.quota?.windows
-                          .filter((w) => !hiddenQuotas.includes(quotaWindowId(w)))
-                          .map((w, i) => (
-                            <div className={styles.quotaWindow} key={`${w.name}-${i}`}>
-                              <span>
-                                {w.name} · {w.seconds / 3600}h · {w.used_percent.toFixed(1)}%
-                              </span>
-                              <progress
-                                aria-label={`${w.name} ${t('qol.used')}`}
-                                max={100}
-                                value={w.used_percent}
-                              />
-                              <small>
-                                {t('qol.reset')}{' '}
-                                {w.reset_at ? new Date(w.reset_at * 1000).toLocaleString() : '—'}
-                              </small>
-                            </div>
-                          ))}
-                        <small>
-                          {t('qol.updated')}{' '}
-                          {a.quota?.updated_at
-                            ? new Date(a.quota.updated_at).toLocaleString()
-                            : t('qol.unknown')}
-                        </small>
-                        {a.quota?.error && (
-                          <small role="status" className={styles.error}>
-                            {a.quota.error}
-                          </small>
-                        )}
-                      </div>
+                      <AccountQuota
+                        account={a}
+                        hidden={hiddenQuotas}
+                        onChange={() => setRevision((v) => v + 1)}
+                      />
                     </td>
                     <td data-label={t('qol.proxy')}>{a.quota?.proxy || '—'}</td>
                     <td data-label={t('qol.status')}>

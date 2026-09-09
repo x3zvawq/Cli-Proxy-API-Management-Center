@@ -2,6 +2,30 @@ import type { Account, Quota } from './api';
 
 export type UsageView = 'monitor' | 'accounts' | 'prices';
 
+export const quotaDuration = (seconds: number) =>
+  seconds > 0 && seconds % 86400 === 0 ? `${seconds / 86400}d` : `${seconds / 3600}h`;
+
+export function quotaLabel(window: Quota['windows'][number]) {
+  const name = window.name.toLowerCase();
+  const period = quotaDuration(window.seconds);
+  return name === 'codex'
+    ? period
+    : name.includes('spark')
+      ? `spark-${period}`
+      : `${window.name} · ${period}`;
+}
+
+export const relativeTimeRange = (days: number, now = Date.now()) => ({
+  start: new Date(now - days * 86400000).toISOString(),
+  end: new Date(now).toISOString(),
+});
+
+export const canResetQuota = (quota: Quota | undefined) =>
+  (quota?.reset_credits ?? 0) > 0 &&
+  (quota?.applicable_reset_credits ?? 0) > 0 &&
+  !quota?.error &&
+  !quota?.reset_credits_error;
+
 export const quotaWindowId = (window: Quota['windows'][number]) =>
   JSON.stringify([window.name, window.seconds]);
 
@@ -13,7 +37,7 @@ export function quotaOptions(accounts: Account[]) {
           (window) =>
             [
               quotaWindowId(window),
-              { id: quotaWindowId(window), label: `${window.name} · ${window.seconds / 3600}h` },
+              { id: quotaWindowId(window), label: quotaLabel(window) },
             ] as const
         )
       )
