@@ -19,7 +19,7 @@ export function useQuotaRefresh(onAccounts: (accounts: Account[]) => void) {
       const controller = new AbortController();
       current.current = controller;
       setRefreshing(true);
-      setStatus(t('qol.refreshing'));
+      setStatus('');
       try {
         const job = await refreshAndWait(account, controller.signal);
         const accounts = await qolApi.accounts(controller.signal);
@@ -28,7 +28,6 @@ export function useQuotaRefresh(onAccounts: (accounts: Account[]) => void) {
         const failures = Object.values(job.errors);
         if (failures.length)
           throw new Error(`${t('qol.refresh_failed')} ${[...new Set(failures)].join('; ')}`);
-        setStatus(t('qol.refresh_done'));
       } catch (e) {
         if (!controller.signal.aborted) {
           setStatus(e instanceof Error ? e.message : String(e));

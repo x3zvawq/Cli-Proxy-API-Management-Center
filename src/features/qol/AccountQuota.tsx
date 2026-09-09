@@ -64,7 +64,7 @@ export function AccountQuota({
       }
       if (!active.current) return;
       await onRefresh(account.auth_index);
-      if (active.current) setMessage(t(reset ? 'qol.reset_accepted' : 'qol.refresh_done'));
+      if (active.current && reset) setMessage(t('qol.reset_accepted'));
     } catch (error) {
       setMessage(
         `${error instanceof Error ? error.message : String(error)}${reset ? ` · ${t('qol.reset_uncertain')}` : ''}`
@@ -127,10 +127,11 @@ export function AccountQuota({
         <button
           className={styles.textButton}
           disabled={busy || refreshing || account.disabled}
+          aria-busy={busy}
           onClick={() => void run(false)}
         >
-          <IconRefreshCw size={13} />
-          {t(refreshing ? 'qol.refreshing' : 'qol.refresh')}
+          <IconRefreshCw size={13} className={busy ? styles.spinning : undefined} />
+          {t(busy ? 'qol.refreshing' : 'qol.refresh')}
         </button>
         <span
           title={`${t('qol.reset_account_scope')} ${t('qol.applicable_hint', { count: q?.applicable_reset_credits ?? '—' })}`}

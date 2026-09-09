@@ -1,18 +1,18 @@
 import { useTranslation } from 'react-i18next';
 import type { RequestRow } from './api';
 import { formatTokens } from './display';
+import { compactMoney } from './metricFormatting';
+import { RequestTokens, RequestCost, RequestTiming, RequestTransport } from './RequestMetrics';
 import styles from './QolPage.module.scss';
 
 export function RequestCards({
   rows,
   names,
   keyLabel,
-  onDetail,
 }: {
   rows: RequestRow[];
   names: Map<string, string>;
   keyLabel: (id: string, stored: string) => string;
-  onDetail: (row: RequestRow) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -21,11 +21,12 @@ export function RequestCards({
         <details key={r.id}>
           <summary>
             <strong>{r.model}</strong>
-            <span>{r.cost === null ? '—' : `$${r.cost.toFixed(5)}`}</span>
+            <span>{compactMoney(r.cost)}</span>
             <small>
               {new Date(r.timestamp).toLocaleString()} ·{' '}
               {t(r.failed ? 'qol.failed' : 'qol.success')}
             </small>
+            <RequestTransport row={r} />
             <small>
               {keyLabel(r.key, r.key_label)} · ↑ {formatTokens(r.context)} / ↓{' '}
               {formatTokens(r.output)}
@@ -42,19 +43,12 @@ export function RequestCards({
                 {r.tier || '—'} / {r.thinking || '—'}
               </dd>
             </div>
-            <div>
-              <dt>{t('qol.timing')}</dt>
-              <dd>
-                {r.ttft_ms ? `${(r.ttft_ms / 1000).toFixed(2)}s` : '—'} /{' '}
-                {r.ttft_ms > 0 && r.latency_ms > r.ttft_ms
-                  ? `${((r.latency_ms - r.ttft_ms) / 1000).toFixed(2)}s · ${(r.output / ((r.latency_ms - r.ttft_ms) / 1000)).toFixed(1)} TPS`
-                  : '—'}
-              </dd>
-            </div>
           </dl>
-          <button className={styles.tokenButton} onClick={() => onDetail(r)}>
-            {t('qol.tokens')} ⓘ
-          </button>
+          <div className={styles.mobileMetrics}>
+            <RequestTokens row={r} />
+            <RequestTiming row={r} />
+          </div>
+          <RequestCost row={r} />
         </details>
       ))}
     </div>

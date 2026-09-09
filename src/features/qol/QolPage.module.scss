@@ -99,6 +99,77 @@
   width: fit-content;
   justify-self: start;
 }
+.refreshButton > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.accountRates {
+  display: grid;
+  gap: 7px;
+  min-width: 125px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-secondary);
+  }
+  b {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+}
+.requestTable {
+  font-variant-numeric: tabular-nums;
+  tbody tr {
+    transition: background 120ms;
+  }
+  tbody tr:nth-child(even) {
+    background: var(--bg-secondary);
+  }
+  tbody tr:hover {
+    background: var(--bg-tertiary);
+  }
+  th {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+  td {
+    vertical-align: middle;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  td > strong {
+    font-weight: 600;
+  }
+}
+.successBadge,
+.failedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  &::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+}
+.successBadge {
+  color: #6c9a80;
+  background: #6c9a8018;
+}
+.failedBadge {
+  color: #bd7d7d;
+  background: #bd7d7d18;
+}
 
 .plusPlan {
   display: inline-flex;
@@ -291,7 +362,7 @@
   }
 }
 .details {
-  div {
+  > div {
     display: flex;
     justify-content: space-between;
     padding: 10px 0;
@@ -300,6 +371,14 @@
   dd {
     margin: 0;
   }
+}
+.mobileMetrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
 }
 .priceFieldset {
   padding: 0;

@@ -1,6 +1,19 @@
 .cell {
   min-width: 300px;
 }
+.spinning {
+  animation: quota-spin 1s linear infinite;
+}
+@keyframes quota-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}
 .textButton {
   display: inline-flex;
   align-items: center;

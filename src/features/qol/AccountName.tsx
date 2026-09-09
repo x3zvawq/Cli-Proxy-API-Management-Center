@@ -49,6 +49,11 @@ export function AccountName({ account, onChange }: { account: Account; onChange:
           {account.email}
         </small>
       )}
+      {!account.disabled && account.status && account.status !== 'active' && (
+        <small role="status" title={t('qol.account_status_hint')}>
+          {t('qol.status')}: {account.status}
+        </small>
+      )}
       <Modal
         open={open}
         title={t('qol.edit_name')}

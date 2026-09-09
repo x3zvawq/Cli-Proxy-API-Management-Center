@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Summary } from './api';
 import { formatTokens } from './display';
+import { compactMoney } from './metricFormatting';
 import styles from './QolPage.module.scss';
 
 export function UsageBreakdown({
@@ -66,7 +67,9 @@ export function UsageBreakdown({
                   {row.context ? `${((100 * row.cache_read) / row.context).toFixed(1)}%` : '—'}
                 </td>
                 <td data-label={t('qol.cost')}>
-                  {row.priced ? `$${row.cost.toFixed(5)}` : '—'}
+                  <span title={row.priced ? '$' + row.cost.toFixed(8) : undefined}>
+                    {row.priced ? compactMoney(row.cost) : '—'}
+                  </span>
                   <small>
                     {row.priced} / {row.requests}
                   </small>

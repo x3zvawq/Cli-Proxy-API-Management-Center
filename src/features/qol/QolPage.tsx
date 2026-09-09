@@ -13,7 +13,6 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconRefreshCw } from '@/components/ui/icons';
 import { PriceSettingsCard } from '@/components/usage/PriceSettingsCard';
@@ -28,11 +27,12 @@ import {
   type Filters,
   type Prices,
   type RequestPage,
-  type RequestRow,
   type Summary,
 } from './api';
 import styles from './QolPage.module.scss';
 import { RequestCards } from './RequestCards';
+import { RequestTokens, RequestCost, RequestTiming, RequestTransport } from './RequestMetrics';
+import { compactMoney, accountRates } from './metricFormatting';
 import { QuotaColumnMenu } from './QuotaColumnMenu';
 import { AccountQuota } from './AccountQuota';
 import { UsageBreakdown } from './UsageBreakdown';
@@ -61,7 +61,7 @@ ChartJS.register(
   Legend
 );
 const number = (value: number) => value.toLocaleString();
-const money = (value: number | null) => (value === null ? '—' : `$${value.toFixed(5)}`);
+const money = compactMoney;
 const initialRange = () => relativeTimeRange(1);
 
 export function UsagePage({ view }: { view: UsageView }) {
@@ -124,7 +124,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [detail, setDetail] = useState<RequestRow | null>(null);
+  const [accountSummary, setAccountSummary] = useState<Summary | null>(null);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -139,7 +139,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
   }, [revision]);
 
   useEffect(() => {
-    if (tab !== 'prices') return;
+    if (tab !== 'prices' && tab !== 'monitor') return;
     let active = true;
     void useQolPriceStore
       .getState()
@@ -224,6 +224,35 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
     };
   }, [tab, quotaRefreshing]);
 
+  useEffect(() => {
+    if (tab !== 'accounts' || quotaRefreshing) return;
+    let current: AbortController | undefined;
+    const update = () => {
+      current?.abort();
+      current = new AbortController();
+      const signal = current.signal;
+      void qolApi
+        .summary(relativeTimeRange(1), signal)
+        .then((value) => {
+          if (!signal.aborted) setAccountSummary(value);
+        })
+        .catch((e: Error) => {
+          if (!signal.aborted) {
+            setAccountSummary(null);
+            setError(e.message);
+          }
+        });
+    };
+    update();
+    const timer = window.setInterval(() => {
+      if (!document.hidden) update();
+    }, 60000);
+    return () => {
+      clearInterval(timer);
+      current?.abort();
+    };
+  }, [tab, revision, quotaRefreshing]);
+
   const mutate = async (operation: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -294,10 +323,16 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           <h1>{t(tab === 'monitor' ? 'nav.monitoring_center' : `qol.${tab}`)}</h1>
         </div>
         <Button
+          className={styles.refreshButton}
           size="sm"
           variant="secondary"
-          disabled={busy}
+          disabled={busy || loading || quotaRefreshing}
+          aria-busy={loading || quotaRefreshing}
           onClick={() => {
+            if (tab === 'accounts') {
+              void refreshQuota().catch(() => {});
+              return;
+            }
             if (relativeDays !== null && tab === 'monitor') {
               const range = relativeTimeRange(relativeDays);
               setFilters((f) => ({ ...f, ...range }));
@@ -310,6 +345,10 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
             setRevision((v) => v + 1);
           }}
         >
+          <IconRefreshCw
+            size={14}
+            className={loading || quotaRefreshing ? quotaStyles.spinning : undefined}
+          />
           {t('qol.refresh')}
         </Button>
       </header>
@@ -423,15 +462,23 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
               ],
               ['ttft', totals?.ttft_ms ? `${(totals.ttft_ms / 1000).toFixed(2)}s` : '—'],
             ].map(([label, value]) => (
-              <article key={label}>
+              <article
+                key={label}
+                title={
+                  label === 'cost'
+                    ? t('qol.cost_hint', {
+                        priced: totals?.priced || 0,
+                        total: totals?.requests || 0,
+                      })
+                    : undefined
+                }
+              >
                 <span>{t(`qol.${label}`)}</span>
                 <strong>{value}</strong>
               </article>
             ))}
           </section>
-          <p className={styles.hint}>
-            {t('qol.cost_hint', { priced: totals?.priced || 0, total: totals?.requests || 0 })}
-          </p>
+
           <section className={styles.panel}>
             <h2>{t('qol.trend')}</h2>
             <div className={styles.chart}>
@@ -462,15 +509,10 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           </section>
           <UsageBreakdown summary={summary} names={names} keyLabel={keyLabel} />
           <section className={styles.panel}>
-            <h2>{t('qol.requests')}</h2>
-            <RequestCards
-              rows={requests?.items || []}
-              names={names}
-              keyLabel={keyLabel}
-              onDetail={setDetail}
-            />
+            <h2>{t('qol.request_details')}</h2>
+            <RequestCards rows={requests?.items || []} names={names} keyLabel={keyLabel} />
             <div className={`${styles.tableWrap} ${styles.desktopRequests}`}>
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.requestTable}`}>
                 <thead>
                   <tr>
                     {[
@@ -478,11 +520,11 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                       'model',
                       'key',
                       'tokens',
+                      'timing',
                       'tier',
                       'cost',
                       'accounts',
                       'result',
-                      'timing',
                     ].map((id) => (
                       <th key={id}>{t(`qol.${id}`)}</th>
                     ))}
@@ -491,38 +533,37 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                 <tbody>
                   {requests?.items.map((r) => (
                     <tr key={r.id}>
-                      <td data-label={t('qol.time')}>{new Date(r.timestamp).toLocaleString()}</td>
+                      <td data-label={t('qol.time')}>
+                        <strong>{new Date(r.timestamp).toLocaleTimeString()}</strong>
+                        <small>{new Date(r.timestamp).toLocaleDateString()}</small>
+                      </td>
                       <td data-label={t('qol.model')}>
-                        {r.model}
-                        <small>{r.executor || t('qol.unknown')}</small>
+                        <strong>{r.model}</strong>
+                        <small>
+                          <RequestTransport row={r} />
+                        </small>
                       </td>
                       <td data-label={t('qol.key')}>{keyLabel(r.key, r.key_label)}</td>
                       <td data-label={t('qol.tokens')}>
-                        <button className={styles.tokenButton} onClick={() => setDetail(r)}>
-                          ↑ {formatTokens(r.context)} / ↓ {formatTokens(r.output)}
-                          <small>
-                            {t('qol.context')} {formatTokens(r.context)} ⓘ
-                          </small>
-                        </button>
+                        <RequestTokens row={r} />
+                      </td>
+                      <td data-label={t('qol.timing')}>
+                        <RequestTiming row={r} />
                       </td>
                       <td data-label={t('qol.tier')}>
                         {r.tier || '—'}
                         <small>{r.thinking || '—'}</small>
                       </td>
-                      <td data-label={t('qol.cost')}>{money(r.cost)}</td>
+                      <td data-label={t('qol.cost')}>
+                        <RequestCost row={r} />
+                      </td>
                       <td data-label={t('qol.accounts')}>
                         {names.get(r.account) || r.account || '—'}
                       </td>
                       <td data-label={t('qol.result')}>
-                        {t(r.failed ? 'qol.failed' : 'qol.success')}
-                      </td>
-                      <td data-label={t('qol.timing')}>
-                        {r.ttft_ms > 0 ? `${(r.ttft_ms / 1000).toFixed(2)}s` : '—'}
-                        <small>
-                          {r.ttft_ms > 0 && r.latency_ms > r.ttft_ms
-                            ? `${((r.latency_ms - r.ttft_ms) / 1000).toFixed(2)}s · ${(r.output / ((r.latency_ms - r.ttft_ms) / 1000)).toFixed(1)} TPS`
-                            : '—'}
-                        </small>
+                        <span className={r.failed ? styles.failedBadge : styles.successBadge}>
+                          {t(r.failed ? 'qol.failed' : 'qol.success')}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -557,46 +598,49 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
             <Link to="/auth-files">{t('qol.manage_files')}</Link>
           </div>
           {refreshStatus && (
-            <p className={styles.hint} role="status">
+            <p role="alert" className={styles.error}>
               {refreshStatus}
             </p>
           )}
-          <p className={styles.hint}>{t('qol.quota_hint')}</p>
-          <details className={styles.hint}>
-            <summary>
-              {t('qol.cycle_snapshot')} · {t('qol.estimated_capacity')}
-            </summary>
-            <p>{t('qol.estimate_hint')}</p>
-          </details>
           <div className={styles.tableWrap}>
             <table className={`${styles.table} ${styles.accountTable}`}>
               <thead>
                 <tr>
-                  {['accounts', 'provider', 'plan', 'enabled', 'quota', 'proxy', 'status'].map(
-                    (id) => (
-                      <th key={id} className={id === 'quota' ? styles.quotaHeader : undefined}>
-                        {id === 'quota' ? (
-                          <div className={styles.quotaHeading}>
-                            <QuotaColumnMenu
-                              options={availableQuotas}
-                              hidden={hiddenQuotas}
-                              onToggle={toggleQuota}
+                  {[
+                    'accounts',
+                    'provider',
+                    'plan',
+                    'enabled',
+                    'quota',
+                    'proxy',
+                    'account_rates',
+                  ].map((id) => (
+                    <th key={id} className={id === 'quota' ? styles.quotaHeader : undefined}>
+                      {id === 'quota' ? (
+                        <div className={styles.quotaHeading}>
+                          <QuotaColumnMenu
+                            options={availableQuotas}
+                            hidden={hiddenQuotas}
+                            onToggle={toggleQuota}
+                          />
+                          <button
+                            className={quotaStyles.textButton}
+                            disabled={quotaRefreshing}
+                            aria-busy={quotaRefreshing}
+                            onClick={() => void refreshQuota().catch(() => {})}
+                          >
+                            <IconRefreshCw
+                              size={13}
+                              className={quotaRefreshing ? quotaStyles.spinning : undefined}
                             />
-                            <button
-                              className={quotaStyles.textButton}
-                              disabled={quotaRefreshing}
-                              onClick={() => void refreshQuota().catch(() => {})}
-                            >
-                              <IconRefreshCw size={13} />
-                              {t(quotaRefreshing ? 'qol.refreshing' : 'qol.refresh_all')}
-                            </button>
-                          </div>
-                        ) : (
-                          t(`qol.${id}`)
-                        )}
-                      </th>
-                    )
-                  )}
+                            {t(quotaRefreshing ? 'qol.refreshing' : 'qol.refresh_all')}
+                          </button>
+                        </div>
+                      ) : (
+                        t(`qol.${id}`)
+                      )}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -628,8 +672,31 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                       />
                     </td>
                     <td data-label={t('qol.proxy')}>{a.quota?.proxy || '—'}</td>
-                    <td data-label={t('qol.status')}>
-                      {a.disabled ? t('qol.disabled') : a.status || t('qol.enabled')}
+                    <td data-label={t('qol.account_rates')} title={t('qol.account_rates_hint')}>
+                      {(() => {
+                        const row = accountSummary?.accounts.find(
+                          (item) => item.id === a.auth_index
+                        );
+                        const rates = accountRates(row);
+                        return (
+                          <div className={styles.accountRates}>
+                            <span>
+                              {t('qol.success_rate')}{' '}
+                              <b>
+                                {rates.success === null
+                                  ? '—'
+                                  : (rates.success * 100).toFixed(1) + '%'}
+                              </b>
+                            </span>
+                            <span>
+                              {t('qol.cache_hit')}{' '}
+                              <b>
+                                {rates.cache === null ? '—' : (rates.cache * 100).toFixed(1) + '%'}
+                              </b>
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -654,31 +721,6 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           </fieldset>
         </section>
       )}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={t('qol.tokens')}>
-        {detail && (
-          <>
-            <dl className={styles.details}>
-              {(
-                [
-                  'input',
-                  'output',
-                  'reasoning',
-                  'cache_read',
-                  'cache_write',
-                  'context',
-                  'total',
-                ] as const
-              ).map((id) => (
-                <div key={id}>
-                  <dt>{t(`qol.${id}`)}</dt>
-                  <dd>{number(detail[id])}</dd>
-                </div>
-              ))}
-            </dl>
-            <p>{t('qol.transport_hint')}</p>
-          </>
-        )}
-      </Modal>
     </div>
   );
 }
