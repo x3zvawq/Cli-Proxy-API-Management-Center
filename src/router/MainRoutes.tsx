@@ -5,9 +5,6 @@ import { AuthFilesPage } from '@/features/authFiles/AuthFilesPage';
 import { AuthFilesOAuthExcludedEditPage } from '@/pages/AuthFilesOAuthExcludedEditPage';
 import { AuthFilesOAuthModelAliasEditPage } from '@/pages/AuthFilesOAuthModelAliasEditPage';
 import { OAuthPage } from '@/pages/OAuthPage';
-import { QuotaPage } from '@/features/quota/QuotaPage';
-import { MonitoringCenterPage } from '@/pages/MonitoringCenterPage';
-import { CredentialCenterPage } from '@/pages/CredentialCenterPage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
@@ -15,9 +12,10 @@ import { ConfigPage } from '@/features/config/ConfigPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { useAuthStore } from '@/stores';
+import { QolPage } from '@/features/qol/QolPage';
 
 const createMainRoutes = (supportsPlugin: boolean) => [
-  { path: '/', element: <DashboardPage /> },
+  { path: '/', element: supportsPlugin ? <Navigate to="/qol" replace /> : <DashboardPage /> },
   { path: '/dashboard', element: <DashboardPage /> },
   { path: '/settings', element: <Navigate to="/config" replace /> },
   { path: '/api-keys', element: <Navigate to="/config" replace /> },
@@ -29,11 +27,14 @@ const createMainRoutes = (supportsPlugin: boolean) => [
   { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
   { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
   { path: '/oauth', element: <OAuthPage /> },
-  { path: '/quota', element: <QuotaPage /> },
-  { path: '/monitor', element: <MonitoringCenterPage /> },
-  { path: '/credential-center', element: <CredentialCenterPage /> },
+  { path: '/quota', element: <Navigate to="/qol/accounts" replace /> },
+  { path: '/monitor', element: <Navigate to="/qol" replace /> },
+  { path: '/credential-center', element: <Navigate to="/qol/accounts" replace /> },
   ...(supportsPlugin
     ? [
+        { path: '/qol', element: <QolPage /> },
+        { path: '/qol/accounts', element: <QolPage /> },
+        { path: '/qol/prices', element: <QolPage /> },
         { path: '/plugin-pages/:pluginId/:menuIndex', element: <PluginResourcePage /> },
         { path: '/plugins', element: <PluginsPage /> },
         { path: '/plugin-store', element: <PluginStorePage /> },

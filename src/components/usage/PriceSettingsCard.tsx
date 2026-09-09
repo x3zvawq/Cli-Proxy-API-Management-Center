@@ -21,6 +21,7 @@ import {
 import {
   loadTierMultipliers,
   saveTierMultipliers,
+  sanitizeTierMultipliers,
   type TierMultiplierRule,
 } from '@/utils/tierMultiplier';
 import styles from '@/pages/UsagePage.module.scss';
@@ -28,7 +29,9 @@ import styles from '@/pages/UsagePage.module.scss';
 export interface PriceSettingsCardProps {
   modelNames: string[];
   modelPrices: Record<string, ModelPrice>;
-  onPricesChange: (prices: Record<string, ModelPrice>) => void;
+  onPricesChange: (prices: Record<string, ModelPrice>) => void | Promise<boolean>;
+  tierRules?: TierMultiplierRule[];
+  onTierRulesChange?: (rules: TierMultiplierRule[]) => void;
 }
 
 type SyncStatusType = 'info' | 'success' | 'error';
@@ -84,7 +87,9 @@ const contextTiersToDrafts = (tiers?: ContextTierPrice[]): ContextTierDraft[] =>
 export function PriceSettingsCard({
   modelNames,
   modelPrices,
-  onPricesChange
+  onPricesChange,
+  tierRules,
+  onTierRulesChange,
 }: PriceSettingsCardProps) {
   const { t } = useTranslation();
   const availableModels = useMemo(
@@ -215,14 +220,14 @@ export function PriceSettingsCard({
 
   const handleOpenTier = useCallback(() => {
     setTierRows(
-      loadTierMultipliers().map((rule) => ({
+      (tierRules ?? loadTierMultipliers()).map((rule) => ({
         model: rule.model,
         tier: rule.tier,
         multiplier: String(rule.multiplier),
       }))
     );
     setTierOpen(true);
-  }, []);
+  }, [tierRules]);
 
   const handleAddTierRow = useCallback(() => {
     setTierRows((rows) => [...rows, { model: '', tier: '', multiplier: '' }]);
@@ -245,13 +250,18 @@ export function PriceSettingsCard({
       tier: row.tier,
       multiplier: Number.parseFloat(row.multiplier),
     }));
+    if (onTierRulesChange) {
+      onTierRulesChange(sanitizeTierMultipliers(rules));
+      setTierOpen(false);
+      return;
+    }
     saveTierMultipliers(rules);
     // 复用既有响应式链路：刷新 modelPrices 引用，触发本页所有依赖 [modelPrices]
     // 的 memo（模型统计/趋势/总花费/sparkline/API密钥统计）重新计算花费。
     // 凭证中心为独立路由，切换时会自然读取已更新的内存索引。
     onPricesChange({ ...modelPrices });
     setTierOpen(false);
-  }, [tierRows, onPricesChange, modelPrices]);
+  }, [tierRows, onPricesChange, modelPrices, onTierRulesChange]);
 
   // ---- Sync modal handlers ----
 
@@ -319,7 +329,7 @@ export function PriceSettingsCard({
 
       // Merge synced prices into current prices
       const merged = { ...modelPrices, ...result.prices };
-      onPricesChange(merged);
+      if ((await onPricesChange(merged)) === false) throw new Error(t('common.error'));
 
       setSyncStatusMsg(
         t('usage_stats.price_sync_status_success', {
@@ -352,7 +362,9 @@ export function PriceSettingsCard({
     try {
       const result = await syncCodexPrices();
       if (!result.matchedCount) throw new Error(t('usage_stats.price_sync_status_no_match'));
-      onPricesChange({ ...modelPrices, ...result.prices });
+      if ((await onPricesChange({ ...modelPrices, ...result.prices })) === false) {
+        throw new Error(t('common.error'));
+      }
       const missing = CODEX_PRICE_MODELS.filter((model) => !result.prices[model]);
       setSyncStatusMsg(t('monitor_custom.codex_sync_success', { count: result.matchedCount }) +
         (missing.length ? ` ${t('monitor_custom.codex_sync_missing', { models: missing.join(', ') })}` : ''));
@@ -388,7 +400,7 @@ export function PriceSettingsCard({
   return (
     <Card title={t('usage_stats.model_price_settings')} extra={headerActions}>
       <p className={styles.hint}>
-        {t('monitor_custom.codex_price_hint')}{' '}
+        {t(onTierRulesChange ? 'qol.prices_hint' : 'monitor_custom.codex_price_hint')}{' '}
         <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a>
       </p>
       {syncStatusMsg && !syncOpen && <div className={syncStatusClass} role="status">{syncStatusMsg}</div>}
@@ -761,7 +773,7 @@ export function PriceSettingsCard({
         width={560}
       >
         <div className={styles.tierModalBody}>
-          <p className={styles.syncDesc}>{t('usage_stats.tier_multiplier_desc')}</p>
+          <p className={styles.syncDesc}>{t(onTierRulesChange ? 'qol.prices_hint' : 'usage_stats.tier_multiplier_desc')}</p>
 
           <div className={styles.tierRows}>
             <div className={styles.tierRowHead}>

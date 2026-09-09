@@ -646,6 +646,16 @@ export function MainLayout() {
       id: 'observe',
       labelKey: 'nav_groups.observe',
       items: [
+        ...(supportsPlugin
+          ? [
+              {
+                path: '/qol',
+                labelKey: 'qol.title',
+                metaKey: 'qol.subtitle',
+                icon: sidebarIcons.monitoring,
+              },
+            ]
+          : []),
         {
           path: '/quota',
           labelKey: 'nav.quota_management',
@@ -663,7 +673,7 @@ export function MainLayout() {
           labelKey: 'nav.logs',
           metaKey: 'nav_meta.logs',
           icon: sidebarIcons.logs,
-        }
+        },
       ],
     },
     {
@@ -1163,6 +1173,26 @@ export function MainLayout() {
         </div>
       </header>
 
+      {supportsPlugin && !isPluginResourcePage && (
+        <nav className="mobile-quick-nav" aria-label={t('qol.title')}>
+          <NavLink to="/qol" end>
+            {sidebarIcons.monitoring}
+            <span>{t('qol.monitor')}</span>
+          </NavLink>
+          <NavLink to="/qol/accounts">
+            {sidebarIcons.quota}
+            <span>{t('qol.accounts')}</span>
+          </NavLink>
+          <NavLink to="/auth-files">
+            {sidebarIcons.authFiles}
+            <span>{t('nav.auth_files')}</span>
+          </NavLink>
+          <NavLink to="/config">
+            {sidebarIcons.config}
+            <span>{t('nav.config_management')}</span>
+          </NavLink>
+        </nav>
+      )}
       <div className="main-body">
         <button
           type="button"
