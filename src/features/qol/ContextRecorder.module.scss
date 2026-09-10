@@ -1,6 +1,56 @@
 .recorder {
   padding: 4px;
 }
+.inlineReader {
+  display: block;
+  .messageNav {
+    overflow: visible;
+    &:empty {
+      display: none;
+    }
+  }
+  .readingPane {
+    overflow: visible;
+    padding: 0;
+  }
+  .block {
+    margin: 8px 0;
+    border-width: 0 0 0 2px;
+    border-radius: 0;
+  }
+}
+.categoryFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 12px;
+  margin: 0 0 8px;
+  padding: 8px;
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  input {
+    width: auto;
+  }
+}
+.directorySearch {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  input {
+    width: 100%;
+    min-width: 0;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 6px;
+  }
+}
 .toolbar {
   display: flex;
   align-items: center;

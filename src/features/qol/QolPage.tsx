@@ -38,6 +38,7 @@ import { QuotaColumnMenu } from './QuotaColumnMenu';
 import { AccountQuota } from './AccountQuota';
 import { UsageBreakdown } from './UsageBreakdown';
 import { AccountName } from './AccountName';
+import { AccountProbe } from './AccountProbe';
 import { PlanBadge } from './PlanBadge';
 import { useQolPriceStore } from './priceStore';
 import { useQuotaRefresh } from './useQuotaRefresh';
@@ -665,6 +666,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
                   <tr key={a.auth_index || a.id}>
                     <td data-label={t('qol.accounts')}>
                       <AccountName account={a} onChange={() => setRevision((v) => v + 1)} />
+                      <AccountProbe account={a} />
                     </td>
                     <td data-label={t('qol.provider')}>{a.provider || a.type}</td>
                     <td data-label={t('qol.plan')}>

@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
-import { qolApi, type ConversationPage, type ConversationRecord, type Filters } from './api';
-import { ContextReadable } from './ContextReadable';
-import { contextBlocks } from './contextBlocks';
+import { qolApi, type ConversationRecord, type Filters } from './api';
+import { ConversationItems } from './ConversationItems';
 import styles from './ContextRecorder.module.scss';
-import { ContextJump } from './ContextJump';
 
 export function ConversationBrowser({
   filters,
@@ -43,7 +41,7 @@ export function ConversationBrowser({
       {snapshotMode ? (
         snapshots
       ) : groupId ? (
-        <ConversationTimeline id={groupId} />
+        <ConversationItems key={groupId} id={groupId} />
       ) : (
         <ConversationIndex filters={filters} />
       )}
@@ -85,7 +83,7 @@ function ConversationIndex({ filters }: { filters: Filters }) {
             {t('qol.context_back_sessions')}
           </Button>
         </div>
-        <ConversationTimeline key={id} id={id} />
+        <ConversationItems key={id} id={id} />
       </div>
     );
   return (
@@ -141,99 +139,5 @@ function ConversationIndex({ filters }: { filters: Filters }) {
         </div>
       </div>
     </>
-  );
-}
-
-function ConversationTimeline({ id }: { id: string }) {
-  const { t } = useTranslation();
-  const [offsets, setOffsets] = useState([0]);
-  const offset = offsets[offsets.length - 1] ?? 0;
-  const [data, setData] = useState<ConversationPage | null>(null);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    const abort = new AbortController();
-    setData(null);
-    setError('');
-    void qolApi
-      .conversation(id, offset, abort.signal)
-      .then((value) => {
-        if (!abort.signal.aborted) setData(value);
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) setError(String(e));
-      });
-    return () => abort.abort();
-  }, [id, offset]);
-  const entries = useMemo(
-    () =>
-      data?.items.flatMap((item, index) => {
-        const value = ['input', 'messages', 'contents'].includes(item.field)
-          ? [item.value]
-          : item.value;
-        const blocks = contextBlocks(JSON.stringify({ [item.field]: value })) ?? [];
-        return blocks.map((block, part) => ({
-          block,
-          label:
-            blocks.length > 1 ? `${offset + index + 1}.${part + 1}` : String(offset + index + 1),
-        }));
-      }) ?? [],
-    [data, offset]
-  );
-  return (
-    <div className={styles.content} aria-busy={!data && !error}>
-      {!data && !error && (
-        <p role="status" className={styles.loading}>
-          {t('qol.context_loading')}
-        </p>
-      )}
-      {error && <p role="alert">{error}</p>}
-      {data && (
-        <>
-          <p className={styles.note}>
-            {t('qol.context_timeline_count', { count: data.requests, items: data.total })}
-          </p>
-          {data.order_conflict && <p role="status">{t('qol.context_order_conflict')}</p>}
-          {data.total === 0 ? (
-            <p>{t('qol.capture_empty')}</p>
-          ) : (
-            <ContextReadable
-              key={offset}
-              items={entries.map((x) => x.block)}
-              labels={entries.map((x) => x.label)}
-              navigation={
-                <>
-                  <ContextJump
-                    current={offset}
-                    total={data.total}
-                    onJump={(target) => setOffsets((old) => [...old, target])}
-                  />
-                  <div className={styles.pager}>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={offsets.length === 1}
-                      onClick={() => setOffsets((old) => old.slice(0, -1))}
-                    >
-                      {t('qol.capture_previous')}
-                    </Button>
-                    <span>
-                      {Math.min(offset + 1, data.total)}–{data.next_offset}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={data.next_offset >= data.total}
-                      onClick={() => setOffsets((old) => [...old, data.next_offset])}
-                    >
-                      {t('qol.capture_next')}
-                    </Button>
-                  </div>
-                </>
-              }
-            />
-          )}
-        </>
-      )}
-    </div>
   );
 }

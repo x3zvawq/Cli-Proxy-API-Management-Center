@@ -51,6 +51,12 @@ describe('QoL request presentation', () => {
     expect(accountRates({ requests: 20, failures: 2, context: 12000, cache_read: 10000 })).toEqual({ success: 0.9, cache: 10000 / 12000 });
     expect(accountRates()).toEqual({ success: null, cache: null });
   });
+  test('manual quota maintenance does not require enabling an account', () => {
+    const source = readFileSync('src/features/qol/AccountQuota.tsx', 'utf8');
+    expect(source).not.toContain('account.disabled');
+    expect(source).toContain('busy || refreshing || waiting || !canResetQuota(q)');
+    expect(source).toContain('qol.reset_confirm');
+  });
   test('preserves known upstream transports without inventing unknown protocols', () => {
     expect(requestUpstreamTransport('CodexExecutor')).toBe('HTTP');
     expect(requestUpstreamTransport('CodexWebsocketsExecutor')).toBe('WS');

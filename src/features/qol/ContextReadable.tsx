@@ -14,11 +14,13 @@ export function ContextReadable({
   items,
   navigation,
   labels,
+  inline = false,
 }: {
   body?: string;
   items?: ContextBlock[];
   navigation?: ReactNode;
   labels?: string[];
+  inline?: boolean;
 }) {
   const { t } = useTranslation();
   const blocks = useMemo(() => items ?? contextBlocks(body), [body, items]);
@@ -51,21 +53,23 @@ export function ContextReadable({
     });
   };
   return (
-    <div className={styles.readingWorkspace}>
+    <div className={inline ? styles.inlineReader : styles.readingWorkspace}>
       <nav className={styles.messageNav} aria-label={t('qol.context_message_nav')}>
         {navigation}
-        <div className={styles.messageActions}>
-          <Button size="sm" variant="secondary" onClick={() => setClosed(new Set())}>
-            {t('qol.context_expand_all')}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setClosed(new Set(blocks.map((_, i) => i)))}
-          >
-            {t('qol.context_collapse_all')}
-          </Button>
-        </div>
+        {!inline && (
+          <div className={styles.messageActions}>
+            <Button size="sm" variant="secondary" onClick={() => setClosed(new Set())}>
+              {t('qol.context_expand_all')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setClosed(new Set(blocks.map((_, i) => i)))}
+            >
+              {t('qol.context_collapse_all')}
+            </Button>
+          </div>
+        )}
         {pages > 1 && (
           <ContextJump
             current={active}
@@ -74,24 +78,25 @@ export function ContextReadable({
             label={t('qol.context_jump_block')}
           />
         )}
-        {blocks.slice(page * 20, (page + 1) * 20).map((block, index) => {
-          const position = page * 20 + index;
-          return (
-            <button
-              type="button"
-              className={styles.navEntry}
-              key={position}
-              aria-current={active === position ? 'location' : undefined}
-              onClick={() => locate(position)}
-            >
-              <strong>
-                #{labels?.[position] || position + 1} · {block.role} ·{' '}
-                {block.name || t(`qol.context_kind_${block.kind}`)}
-              </strong>
-              <span>{block.text.slice(0, 100) || block.type}</span>
-            </button>
-          );
-        })}
+        {!inline &&
+          blocks.slice(page * 20, (page + 1) * 20).map((block, index) => {
+            const position = page * 20 + index;
+            return (
+              <button
+                type="button"
+                className={styles.navEntry}
+                key={position}
+                aria-current={active === position ? 'location' : undefined}
+                onClick={() => locate(position)}
+              >
+                <strong>
+                  #{labels?.[position] || position + 1} · {block.role} ·{' '}
+                  {block.name || t(`qol.context_kind_${block.kind}`)}
+                </strong>
+                <span>{block.text.slice(0, 100) || block.type}</span>
+              </button>
+            );
+          })}
         {pages > 1 && (
           <div className={styles.pager}>
             <Button size="sm" disabled={!page} onClick={() => locate((page - 1) * 20)}>

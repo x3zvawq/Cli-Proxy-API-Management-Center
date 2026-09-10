@@ -101,6 +101,32 @@ export interface Account {
   quota?: Quota;
 }
 export type Prices = Record<string, ModelPrice & { tierMultipliers?: Record<string, number> }>;
+export interface ProbeRequest {
+  account: string;
+  model: string;
+  effort: string;
+  prompt: string;
+}
+export interface ProbeResult {
+  id: string;
+  account: string;
+  model: string;
+  effort: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  response_model: string;
+  text: string;
+  error: string;
+  category: string;
+  http_status: number;
+  elapsed_ms: number;
+  ttft_ms: number | null;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    output_tokens_details?: { reasoning_tokens?: number };
+  };
+}
 export type Filters = {
   start: string;
   end: string;
@@ -174,6 +200,27 @@ export interface ConversationPage {
   next_offset: number;
   order_conflict: boolean;
 }
+export interface ConversationDirectoryItem {
+  id: string;
+  position: number;
+  references: number;
+  role: string;
+  type: string;
+  category: string;
+  label: string;
+  preview: string;
+}
+export interface ConversationDirectory {
+  items: ConversationDirectoryItem[];
+  total: number;
+  requests: number;
+  order_conflict: boolean;
+}
+export interface ConversationDetail {
+  id: string;
+  field: string;
+  value: unknown;
+}
 async function decompressContext(encoded: string, signal: AbortSignal) {
   const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
   const text = await new Response(
@@ -188,6 +235,44 @@ export interface RefreshJob {
   errors: Record<string, string>;
 }
 export const qolApi = {
+  startProbe: (request: ProbeRequest) =>
+    apiClient.post<{ id: string; status: string }>(`${prefix}/account-test`, request),
+  probe: async (id: string, signal: AbortSignal): Promise<ProbeResult> => {
+    const wire = await apiClient.get<{ result_gzip: string }>(`${prefix}/account-test`, {
+      params: { id },
+      signal,
+    });
+    return JSON.parse(await decompressContext(wire.result_gzip, signal)) as ProbeResult;
+  },
+  cancelProbe: (id: string) =>
+    apiClient.post(`${prefix}/account-test-cancel`, undefined, { params: { id } }),
+  conversationIndex: async (id: string, signal: AbortSignal): Promise<ConversationDirectory> => {
+    const wire = await apiClient.get<Omit<ConversationDirectory, 'items'> & { items_gzip: string }>(
+      `${prefix}/conversation-index`,
+      { params: { id }, signal }
+    );
+    return {
+      ...wire,
+      items: JSON.parse(
+        await decompressContext(wire.items_gzip, signal)
+      ) as ConversationDirectoryItem[],
+    };
+  },
+  conversationItem: async (
+    id: string,
+    item: string,
+    signal: AbortSignal
+  ): Promise<ConversationDetail> => {
+    const wire = await apiClient.get<{ id: string; field: string; value_gzip: string }>(
+      `${prefix}/conversation-item`,
+      { params: { id, item }, signal }
+    );
+    return {
+      id: wire.id,
+      field: wire.field,
+      value: JSON.parse(await decompressContext(wire.value_gzip, signal)) as unknown,
+    };
+  },
   conversations: (
     params: Partial<Filters> & { page: number; page_size: number },
     signal: AbortSignal

@@ -126,7 +126,7 @@ export function AccountQuota({
       <div className={styles.actions}>
         <button
           className={styles.textButton}
-          disabled={busy || refreshing || account.disabled}
+          disabled={busy || refreshing}
           aria-busy={busy}
           onClick={() => void run(false)}
         >
@@ -143,7 +143,7 @@ export function AccountQuota({
         </span>
         <button
           className={styles.textButton}
-          disabled={busy || refreshing || waiting || account.disabled || !canResetQuota(q)}
+          disabled={busy || refreshing || waiting || !canResetQuota(q)}
           onClick={() => setConfirm(true)}
         >
           <IconTimer size={13} />

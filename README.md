@@ -9,7 +9,7 @@
 > [!IMPORTANT]
 > 兼容说明：官方 CPA 已移除使用统计 API。
 >
-> 当前「监控中心」完整功能需要 CPA QoL `0.1.0-rc.7` 或更新版本：
+> 当前「监控中心」轻量目录与账号测试功能需要 CPA QoL `0.1.0-rc.8` 或更新版本：
 > https://github.com/x3zvawq/Cli-Proxy-API-Plugin-QoL
 
 本 README 只记录 **本 fork 相对上游新增/增强的功能点**。

@@ -14,17 +14,87 @@ const input = Array.from({ length: 80 }, (_, i) => ({
         'More readable text.\n\n'.repeat(8),
 }));
 const gzip = (value: unknown) => Buffer.from(gzipSync(JSON.stringify(value))).toString('base64');
+const counts = { directory: 0, details: [] as string[], probes: 0, cancels: 0 };
+let probeStart = 0;
+let probeCancelled = false;
 serve({
   hostname: '127.0.0.1',
   port: 4180,
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/fixture-counts') return Response.json(counts);
     if (!url.pathname.startsWith('/v0/management/'))
       return new Response(file(new URL('../../dist/index.html', import.meta.url)));
     if (request.headers.get('Authorization') !== 'Bearer preview-only')
       return new Response('Unauthorized', { status: 401 });
     let value: unknown;
     switch (url.pathname.slice(prefix.length)) {
+      case 'conversation-index':
+        counts.directory++;
+        await Bun.sleep(1200);
+        value = {
+          id: 'fixture-session',
+          total: 80,
+          requests: 3,
+          order_conflict: false,
+          items_gzip: gzip(
+            input.map((item, i) => ({
+              id: item.id,
+              position: i + 1,
+              references: 3,
+              role: item.role,
+              type: 'message',
+              category: item.role,
+              label: '',
+              preview: `Message ${i + 1} summary`,
+            }))
+          ),
+        };
+        break;
+      case 'conversation-item': {
+        const id = url.searchParams.get('item')!;
+        counts.details.push(id);
+        await Bun.sleep(1200);
+        const item = input.find((item) => item.id === id);
+        if (!item) return Response.json({ error: 'missing' }, { status: 404 });
+        value = { id, field: 'input', value_gzip: gzip(item) };
+        break;
+      }
+      case 'account-test':
+        if (request.method === 'POST') {
+          counts.probes++;
+          probeStart = Date.now();
+          probeCancelled = false;
+          value = { id: 'synthetic-probe', status: 'running' };
+          break;
+        }
+        value = {
+          result_gzip: gzip({
+            id: 'synthetic-probe',
+            account: 'preview-0',
+            model: 'fixture-model',
+            effort: 'high',
+            status: probeCancelled
+              ? 'cancelled'
+              : Date.now() - probeStart > 3500
+                ? 'completed'
+                : 'running',
+            response_model: 'reported-fixture',
+            text: '```html\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240"><rect width="400" height="240" fill="#dceef5"/><text x="30" y="120" font-size="24">Synthetic pelican preview</text></svg>\n```',
+            error: '',
+            category: '',
+            http_status: 200,
+            elapsed_ms: Date.now() - probeStart,
+            ttft_ms: 120,
+            usage: { input_tokens: 10, output_tokens: 30, total_tokens: 40 },
+          }),
+        };
+        break;
+      case 'account-test-cancel':
+        counts.cancels++;
+        probeCancelled = true;
+        value = { cancelled: true };
+        break;
       case 'context-settings':
         value = {
           enabled: true,
@@ -64,16 +134,14 @@ serve({
           next_offset: end,
           order_conflict: false,
           items_gzip: gzip(
-            input
-              .slice(offset, end)
-              .map((item, i) => ({
-                id: item.id,
-                field: 'input',
-                value: item,
-                request_id: `fixture-${i}`,
-                references: 3,
-                parents: 1,
-              }))
+            input.slice(offset, end).map((item, i) => ({
+              id: item.id,
+              field: 'input',
+              value: item,
+              request_id: `fixture-${i}`,
+              references: 3,
+              parents: 1,
+            }))
           ),
         };
         break;
