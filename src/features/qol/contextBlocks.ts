@@ -39,6 +39,21 @@ export function contextBlocks(body: string): ContextBlock[] | null {
       return;
     }
     const type = string(item.type) || (typeof item.text === 'string' ? 'text' : '');
+    if (type === 'additional_tools') {
+      blocks.push({ role: 'system', kind: 'data', type: 'tools', text: json(item.tools) });
+      return;
+    }
+    if (type === 'agent_message') {
+      content(
+        item.content,
+        string(item.author) || string(object(item.author)?.role) || 'assistant'
+      );
+      return;
+    }
+    if (type === 'compaction') {
+      blocks.push({ role: 'system', kind: 'data', type: 'compaction', text: '' });
+      return;
+    }
     if (typeof item.role === 'string' || type === 'message') {
       const currentRole = string(item.role) || role;
       if (currentRole === 'tool' || currentRole === 'function') {
@@ -114,7 +129,7 @@ export function contextBlocks(body: string): ContextBlock[] | null {
           (Array.isArray(item.summary)
             ? item.summary.map((part) => string(object(part)?.text)).join('\n\n')
             : '') ||
-          json(item),
+          (item.encrypted_content ? '' : json(item)),
       });
       return;
     }

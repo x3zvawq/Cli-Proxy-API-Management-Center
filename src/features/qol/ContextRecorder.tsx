@@ -14,6 +14,7 @@ import {
 import { contextText, retentionSteps, storageSize } from './contextDisplay';
 import styles from './ContextRecorder.module.scss';
 import { ContextReadable } from './ContextReadable';
+import { ConversationBrowser } from './ConversationBrowser';
 
 export function ContextRecorder({
   filters,
@@ -188,10 +189,11 @@ export function ContextRecorder({
         width={1100}
       >
         {(open || groupId) && (
-          <ContextBrowser
+          <ConversationBrowser
             key={`${revision}:${groupId || ''}`}
             filters={filters}
             groupId={groupId}
+            snapshots={<ContextBrowser filters={filters} groupId={groupId} />}
           />
         )}
       </Modal>

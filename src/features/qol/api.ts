@@ -150,12 +150,66 @@ export interface ContextBody {
   body: string;
   truncated: boolean;
 }
+export interface ConversationRecord {
+  id: string;
+  session: string;
+  key_label: string;
+  model: string;
+  timestamp: string;
+  requests: number;
+}
+export interface ConversationItem {
+  id: string;
+  field: string;
+  value: unknown;
+  request_id: string;
+  references: number;
+  parents: number;
+}
+export interface ConversationPage {
+  items: ConversationItem[];
+  total: number;
+  requests: number;
+  offset: number;
+  next_offset: number;
+  order_conflict: boolean;
+}
+async function decompressContext(encoded: string, signal: AbortSignal) {
+  const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+  const text = await new Response(
+    new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+  ).text();
+  signal.throwIfAborted();
+  return text;
+}
 export interface RefreshJob {
   id: string;
   completed: boolean;
   errors: Record<string, string>;
 }
 export const qolApi = {
+  conversations: (
+    params: Partial<Filters> & { page: number; page_size: number },
+    signal: AbortSignal
+  ) =>
+    apiClient.get<{ items: ConversationRecord[]; total: number }>(`${prefix}/conversations`, {
+      params,
+      signal,
+    }),
+  conversation: async (
+    id: string,
+    offset: number,
+    signal: AbortSignal
+  ): Promise<ConversationPage> => {
+    const wire = await apiClient.get<Omit<ConversationPage, 'items'> & { items_gzip: string }>(
+      `${prefix}/conversation`,
+      { params: { id, offset }, signal }
+    );
+    return {
+      ...wire,
+      items: JSON.parse(await decompressContext(wire.items_gzip, signal)) as ConversationItem[],
+    };
+  },
   contextStatus: (signal: AbortSignal) =>
     apiClient.get<ContextStatus>(`${prefix}/context-settings`, { signal }),
   saveContextSettings: (settings: ContextSettings, signal: AbortSignal) =>
@@ -173,11 +227,7 @@ export const qolApi = {
       `${prefix}/context`,
       { params: { id }, signal }
     );
-    const bytes = Uint8Array.from(atob(wire.body_gzip), (c) => c.charCodeAt(0));
-    const body = await new Response(
-      new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
-    ).text();
-    signal.throwIfAborted();
+    const body = await decompressContext(wire.body_gzip, signal);
     return { id: wire.id, body, truncated: wire.truncated };
   },
   summary: (params: Filters, signal: AbortSignal) =>

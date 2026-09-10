@@ -5,10 +5,11 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/Button';
 import { contextBlocks, type ContextBlock } from './contextBlocks';
 import styles from './ContextRecorder.module.scss';
+import { ToolPayload } from './ToolPayload';
 
-export function ContextReadable({ body }: { body: string }) {
+export function ContextReadable({ body = '', items }: { body?: string; items?: ContextBlock[] }) {
   const { t } = useTranslation();
-  const blocks = useMemo(() => contextBlocks(body), [body]);
+  const blocks = useMemo(() => items ?? contextBlocks(body), [body, items]);
   const [page, setPage] = useState(0);
   if (!blocks) return <p role="status">{t('qol.context_invalid')}</p>;
   const pages = Math.max(1, Math.ceil(blocks.length / 20));
@@ -45,7 +46,11 @@ function ReadableBlock({ block, index }: { block: ContextBlock; index: number })
   const parts = Math.max(1, Math.ceil(block.text.length / 65536));
   const text = block.text.slice(part * 65536, (part + 1) * 65536);
   const body =
-    block.kind === 'data' || block.kind === 'tool_call' ? (
+    block.type === 'compaction' || (block.kind === 'reasoning' && !text) ? (
+      <p className={styles.note}>{t('qol.context_encrypted')}</p>
+    ) : block.kind === 'tool_call' || block.kind === 'tool_result' ? (
+      <ToolPayload text={text} result={block.kind === 'tool_result'} />
+    ) : block.kind === 'data' ? (
       <pre>{text}</pre>
     ) : block.kind === 'media' ? (
       <p>

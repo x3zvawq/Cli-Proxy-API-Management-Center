@@ -6,6 +6,53 @@ import { I18nextProvider } from 'react-i18next';
 import en from '../src/i18n/locales/en.json';
 import { contextBlocks } from '../src/features/qol/contextBlocks';
 import { ContextReadable } from '../src/features/qol/ContextReadable';
+import { ToolPayload } from '../src/features/qol/ToolPayload';
+
+test('Codex agent messages, tool declarations and encrypted states remain readable', () => {
+  const blocks = contextBlocks(
+    JSON.stringify({
+      input: [
+        { type: 'additional_tools', role: 'system', tools: [{ name: 'exec' }] },
+        {
+          type: 'agent_message',
+          author: 'assistant',
+          content: [{ type: 'output_text', text: '**Progress**' }],
+        },
+        { type: 'custom_tool_call', name: 'exec', call_id: 'a', input: 'await run();' },
+        { type: 'custom_tool_call_output', call_id: 'a', output: [{ type: 'text', text: 'done' }] },
+        { type: 'compaction', encrypted_content: 'opaque-data' },
+        { type: 'reasoning', summary: [], encrypted_content: 'opaque-data' },
+      ],
+    })
+  );
+  expect(blocks?.map((x) => x.type)).toEqual([
+    'tools',
+    'output_text',
+    'custom_tool_call',
+    'custom_tool_call_output',
+    'compaction',
+    'reasoning',
+  ]);
+  expect(blocks?.[1].text).toBe('**Progress**');
+  expect(blocks?.[4].text).toBe('');
+  expect(blocks?.[5].text).toBe('');
+});
+
+test('Tool parameters and structured output render fields and Markdown, not a JSON envelope', async () => {
+  const i18n = createInstance();
+  await i18n.init({ lng: 'en', resources: { en: { translation: en } } });
+  const render = (text: string, result: boolean) =>
+    renderToStaticMarkup(
+      createElement(I18nextProvider, { i18n }, createElement(ToolPayload, { text, result }))
+    );
+  const args = render('{"command":"pwd","workdir":"/tmp"}', false);
+  expect(args).toContain('<dt>command</dt>');
+  expect(args).toContain('<code>pwd</code>');
+  expect(args).not.toContain('&quot;command&quot;');
+  const output = render('[{"type":"text","text":"**done**"}]', true);
+  expect(output).toContain('<strong>done</strong>');
+  expect(render('<script>unsafe()</script>', true)).not.toContain('<script>');
+});
 
 test('Responses context preserves instructions, message order, tool calls and outputs', () => {
   const blocks = contextBlocks(

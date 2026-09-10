@@ -42,6 +42,10 @@
   overflow: auto;
   overflow-wrap: anywhere;
 }
+.layoutModes {
+  justify-content: flex-start;
+  gap: 18px;
+}
 .block {
   margin-bottom: 12px;
   padding: 12px 14px;
@@ -112,6 +116,44 @@
   color: var(--text-secondary);
   font-size: 11px;
   margin-bottom: 8px;
+}
+.toolPayload {
+  min-width: 0;
+}
+.toolLabel {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.toolFields {
+  margin: 0;
+  > div {
+    display: grid;
+    grid-template-columns: minmax(70px, 120px) minmax(0, 1fr);
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+  dt {
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+  }
+  dd {
+    margin: 0;
+    min-width: 0;
+  }
+}
+.toolText {
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 12px;
+  p {
+    margin: 0;
+  }
+}
+.toolItem + .toolItem {
+  margin-top: 8px;
 }
 .controls {
   display: flex;
