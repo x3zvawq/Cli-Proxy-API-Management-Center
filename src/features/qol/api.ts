@@ -109,12 +109,64 @@ export type Filters = {
   result?: string;
 };
 const prefix = '/plugins/cpa-qol';
+export interface ContextSettings {
+  enabled: boolean;
+  retention_hours: number;
+}
+export interface ContextStatus extends ContextSettings {
+  records: number;
+  stored_bytes: number;
+  disk_bytes: number;
+  limit_bytes: number;
+  dropped: number;
+  write_errors: number;
+}
+export interface ContextRecord {
+  id: string;
+  timestamp: string;
+  model: string;
+  format: string;
+  session: string;
+  stream: boolean;
+  original_bytes: number;
+  stored_bytes: number;
+  truncated: boolean;
+}
+export interface ContextPage {
+  items: ContextRecord[];
+  total: number;
+}
+export interface ContextBody {
+  id: string;
+  body: string;
+  truncated: boolean;
+}
 export interface RefreshJob {
   id: string;
   completed: boolean;
   errors: Record<string, string>;
 }
 export const qolApi = {
+  contextStatus: (signal: AbortSignal) =>
+    apiClient.get<ContextStatus>(`${prefix}/context-settings`, { signal }),
+  saveContextSettings: (settings: ContextSettings, signal: AbortSignal) =>
+    apiClient.put<ContextStatus>(`${prefix}/context-settings`, settings, { signal }),
+  contexts: (
+    params: Pick<Filters, 'start' | 'end' | 'model'> & { page: number; page_size: number },
+    signal: AbortSignal
+  ) => apiClient.get<ContextPage>(`${prefix}/contexts`, { params, signal }),
+  contextBody: async (id: string, signal: AbortSignal): Promise<ContextBody> => {
+    const wire = await apiClient.get<{ id: string; body_gzip: string; truncated: boolean }>(
+      `${prefix}/context`,
+      { params: { id }, signal }
+    );
+    const bytes = Uint8Array.from(atob(wire.body_gzip), (c) => c.charCodeAt(0));
+    const body = await new Response(
+      new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+    ).text();
+    signal.throwIfAborted();
+    return { id: wire.id, body, truncated: wire.truncated };
+  },
   summary: (params: Filters, signal: AbortSignal) =>
     apiClient.get<Summary>(`${prefix}/summary`, { params, signal }),
   requests: (

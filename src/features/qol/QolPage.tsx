@@ -31,6 +31,7 @@ import {
 } from './api';
 import styles from './QolPage.module.scss';
 import { RequestTable } from './RequestTable';
+import { ContextRecorder } from './ContextRecorder';
 import { requestColumns, defaultColumns, selectedFields } from './requestColumns';
 import { compactMoney, accountRates } from './metricFormatting';
 import { QuotaColumnMenu } from './QuotaColumnMenu';
@@ -416,6 +417,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       )}
       {tab === 'monitor' && (
         <>
+          <ContextRecorder filters={filters} />
           <section className={styles.filters}>
             <label>
               {t('qol.start')}
