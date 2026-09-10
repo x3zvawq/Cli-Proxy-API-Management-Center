@@ -121,6 +121,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
     status: refreshStatus,
   } = useQuotaRefresh(setAccounts);
   const [page, setPage] = useState(1);
+  const [contextGroup, setContextGroup] = useState<string | undefined>();
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -141,7 +142,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
     }
     return defaultColumns;
   });
-  const fields = selectedFields(columns);
+  const fields = `${selectedFields(columns)},context_group`;
   const toggleColumn = (id: string, visible: boolean) => {
     const next = visible ? [...columns, id] : columns.filter((c) => c !== id);
     if (!next.length) return;
@@ -417,7 +418,6 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
       )}
       {tab === 'monitor' && (
         <>
-          <ContextRecorder filters={filters} />
           <section className={styles.filters}>
             <label>
               {t('qol.start')}
@@ -570,6 +570,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
           <section className={styles.panel}>
             <div className={styles.breakdownHeading}>
               <h2>{t('qol.request_details')}</h2>
+              <ContextRecorder filters={filters} groupId={contextGroup} onCloseGroup={() => setContextGroup(undefined)} />
               <QuotaColumnMenu
                 label={t('qol.visible_columns')}
                 title={t('qol.visible_columns')}
@@ -584,6 +585,7 @@ function UsageWorkspace({ tab, base }: { tab: UsageView; base: string }) {
               columns={columns}
               names={names}
               keyLabel={keyLabel}
+              onViewContext={setContextGroup}
             />
             {!loading && !requests?.items.length && <p>{t('qol.empty')}</p>}
             <footer className={styles.pagination}>

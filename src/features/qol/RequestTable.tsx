@@ -3,17 +3,20 @@ import type { ProjectedRequest } from './api';
 import { RequestCell } from './RequestCell';
 import { selectedColumns } from './requestColumns';
 import styles from './QolPage.module.scss';
+import { Button } from '@/components/ui/Button';
 
 export function RequestTable({
   rows,
   columns: selection,
   names,
   keyLabel,
+  onViewContext,
 }: {
   rows: ProjectedRequest[];
   columns: string[];
   names: Map<string, string>;
   keyLabel: (id: string, stored: string) => string;
+  onViewContext?: (group: string) => void;
 }) {
   const { t } = useTranslation();
   const columns = selectedColumns(selection);
@@ -52,6 +55,15 @@ export function RequestTable({
                   </div>
                 ))}
             </dl>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!r.context_group || !onViewContext}
+              title={r.context_group ? t('qol.context_group_help') : t('qol.context_no_session')}
+              onClick={() => r.context_group && onViewContext?.(r.context_group)}
+            >
+              {t('qol.context_view')}
+            </Button>
           </details>
         ))}
       </div>
@@ -64,6 +76,7 @@ export function RequestTable({
                   {t(`qol.${c.id}`)}
                 </th>
               ))}
+              <th>{t('qol.context_view')}</th>
             </tr>
           </thead>
           <tbody>
@@ -78,6 +91,19 @@ export function RequestTable({
                     <RequestCell {...props} row={r} column={c.id} />
                   </td>
                 ))}
+                <td>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!r.context_group || !onViewContext}
+                    title={
+                      r.context_group ? t('qol.context_group_help') : t('qol.context_no_session')
+                    }
+                    onClick={() => r.context_group && onViewContext?.(r.context_group)}
+                  >
+                    {t('qol.context_view')}
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>

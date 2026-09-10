@@ -1,6 +1,6 @@
 # Cli-Proxy-API-Management-Center
 
-此仓库是 x3zvawq 基于 Fwindy 继续维护的自用版本。新增自定义时间区间、全局筛选、趋势曲线、Token / TTFT 概览，以及带下游 Key 的分页明细。使用、构建、统计口径与发布说明见 [自用监控面板](MONITOR-FORK.md)。以下保留 Fwindy 的原有功能说明。
+此仓库是 x3zvawq 维护的官方 router-for-me 管理面板 fork，并保留有价值的 Fwindy 改动。当前监控中心、账号管理和模型价格由 [CPA QoL](https://github.com/x3zvawq/Cli-Proxy-API-Plugin-QoL) 提供服务端聚合与分页。最新上下文功能见 [使用说明](docs/CONTEXT_VIEWER.md)，上游同步约定见 [分支说明](docs/QOL_UPSTREAM.md)。以下保留 Fwindy 的历史功能说明；[旧监控面板文档](MONITOR-FORK.md) 描述的是迁移前版本。
 
 > 本仓库为上游 Web UI 项目的二次开发版本。
 >
@@ -9,8 +9,8 @@
 > [!IMPORTANT]
 > 兼容说明：官方 CPA 已移除使用统计 API。
 >
-> 如需使用本 fork 的「监控中心」完整功能，必须搭配本 fork 适配的插件：
-> https://github.com/Fwindy/cpa-usage-statistics
+> 当前「监控中心」完整功能需要 CPA QoL `0.1.0-rc.6` 或更新版本：
+> https://github.com/x3zvawq/Cli-Proxy-API-Plugin-QoL
 
 本 README 只记录 **本 fork 相对上游新增/增强的功能点**。
 

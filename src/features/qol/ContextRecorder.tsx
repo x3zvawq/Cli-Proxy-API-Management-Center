@@ -8,18 +8,29 @@ import {
   type ContextStatus,
   type ContextPage,
   type ContextBody,
+  type ContextRecord,
   type Filters,
 } from './api';
 import { contextText, retentionSteps, storageSize } from './contextDisplay';
 import styles from './ContextRecorder.module.scss';
+import { ContextReadable } from './ContextReadable';
 
-export function ContextRecorder({ filters }: { filters: Filters }) {
+export function ContextRecorder({
+  filters,
+  groupId,
+  onCloseGroup,
+}: {
+  filters: Filters;
+  groupId?: string;
+  onCloseGroup: () => void;
+}) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<ContextStatus | null>(null);
   const [hours, setHours] = useState(24);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const pending = useRef(false);
   const generation = useRef(0);
@@ -90,80 +101,105 @@ export function ContextRecorder({ filters }: { filters: Filters }) {
       ? t('qol.capture_days', { count: hours / 24 })
       : t('qol.capture_hours', { count: hours });
   return (
-    <section className={styles.recorder} aria-label={t('qol.capture_title')} aria-busy={busy}>
-      <div className={styles.controls}>
-        <ToggleSwitch
-          checked={status?.enabled ?? false}
-          disabled={!status || busy}
-          label={t('qol.capture_title')}
-          onChange={(enabled) => void save(enabled, hours)}
-        />
-        <label className={styles.retention}>
-          <span>
-            {t('qol.capture_retention')} <strong>{duration}</strong>
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={retentionSteps.length - 1}
-            step={1}
-            value={Math.max(0, retentionSteps.indexOf(hours))}
-            disabled={!status || busy}
-            aria-valuetext={duration}
-            onChange={(e) => setHours(retentionSteps[Number(e.target.value)])}
-            onPointerUp={() => void save(status?.enabled ?? false, hours)}
-            onKeyUp={(e) => {
-              if (
-                ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)
-              )
-                void save(status?.enabled ?? false, hours);
-            }}
-            onBlur={() => void save(status?.enabled ?? false, hours)}
-          />
-        </label>
-        <span className={styles.space} title={t('qol.capture_disk_help')}>
-          {t('qol.capture_disk', { size: storageSize(status?.disk_bytes ?? 0) })}
-          <small>
-            {t('qol.capture_stored', {
-              count: status?.records ?? 0,
-              size: storageSize(status?.stored_bytes ?? 0),
-            })}
-          </small>
-        </span>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => {
-            setRevision((v) => v + 1);
-            setOpen(true);
-          }}
-          disabled={!status}
-        >
-          {t('qol.capture_browse')}
-        </Button>
-      </div>
-      <p className={styles.note}>
-        {t('qol.capture_help', { size: storageSize(status?.limit_bytes ?? 1073741824) })}
-      </p>
-      {!!status && (status.dropped > 0 || status.write_errors > 0) && (
-        <p role="status">
-          {t('qol.capture_dropped', { dropped: status.dropped, errors: status.write_errors })}
-        </p>
-      )}
-      {error && <p role="alert">{error}</p>}
+    <div className={styles.toolbar}>
+      <Button size="sm" variant="secondary" onClick={() => setSettingsOpen(true)}>
+        {t('qol.context_control', {
+          state: status ? t(status.enabled ? 'qol.context_on' : 'qol.context_off') : '…',
+        })}
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={!status}
+        onClick={() => {
+          setRevision((v) => v + 1);
+          setOpen(true);
+        }}
+      >
+        {t('qol.capture_browse')}
+      </Button>
       <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={t('qol.capture_browse')}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        title={t('qol.capture_title')}
+        width={620}
+      >
+        <section className={styles.recorder} aria-label={t('qol.capture_title')} aria-busy={busy}>
+          <div className={styles.controls}>
+            <ToggleSwitch
+              checked={status?.enabled ?? false}
+              disabled={!status || busy}
+              label={t('qol.capture_title')}
+              onChange={(enabled) => void save(enabled, hours)}
+            />
+            <label className={styles.retention}>
+              <span>
+                {t('qol.capture_retention')} <strong>{duration}</strong>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={retentionSteps.length - 1}
+                step={1}
+                value={Math.max(0, retentionSteps.indexOf(hours))}
+                disabled={!status || busy}
+                aria-valuetext={duration}
+                onChange={(e) => setHours(retentionSteps[Number(e.target.value)])}
+                onPointerUp={() => void save(status?.enabled ?? false, hours)}
+                onKeyUp={(e) => {
+                  if (
+                    ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(
+                      e.key
+                    )
+                  )
+                    void save(status?.enabled ?? false, hours);
+                }}
+                onBlur={() => void save(status?.enabled ?? false, hours)}
+              />
+            </label>
+            <span className={styles.space} title={t('qol.capture_disk_help')}>
+              {t('qol.capture_disk', { size: storageSize(status?.disk_bytes ?? 0) })}
+              <small>
+                {t('qol.capture_stored', {
+                  count: status?.records ?? 0,
+                  size: storageSize(status?.stored_bytes ?? 0),
+                })}
+              </small>
+            </span>
+          </div>
+          <p className={styles.note}>
+            {t('qol.capture_help', { size: storageSize(status?.limit_bytes ?? 1073741824) })}
+          </p>
+          {!!status && (status.dropped > 0 || status.write_errors > 0) && (
+            <p role="status">
+              {t('qol.capture_dropped', { dropped: status.dropped, errors: status.write_errors })}
+            </p>
+          )}
+          {error && <p role="alert">{error}</p>}
+        </section>
+      </Modal>
+      <Modal
+        open={open || !!groupId}
+        onClose={() => {
+          setOpen(false);
+          onCloseGroup();
+        }}
+        title={t(groupId ? 'qol.context_conversation' : 'qol.capture_browse')}
         width={1100}
       >
-        {open && <ContextBrowser key={revision} filters={filters} />}
+        {(open || groupId) && (
+          <ContextBrowser
+            key={`${revision}:${groupId || ''}`}
+            filters={filters}
+            groupId={groupId}
+          />
+        )}
       </Modal>
-    </section>
+    </div>
   );
 }
 
-function ContextBrowser({ filters }: { filters: Filters }) {
+function ContextBrowser({ filters, groupId }: { filters: Filters; groupId?: string }) {
   const { t } = useTranslation();
   // Monitor polling must not reset the open body or the user's context list.
   const [range] = useState(() => ({
@@ -181,7 +217,7 @@ function ContextBrowser({ filters }: { filters: Filters }) {
     setError('');
     setId('');
     void qolApi
-      .contexts({ ...range, page, page_size: 20 }, abort.signal)
+      .contexts({ ...(groupId ? { group_id: groupId } : range), page, page_size: 20 }, abort.signal)
       .then((value) => {
         if (!abort.signal.aborted) setData(value);
       })
@@ -189,10 +225,12 @@ function ContextBrowser({ filters }: { filters: Filters }) {
         if (!abort.signal.aborted) setError(String(e));
       });
     return () => abort.abort();
-  }, [range, page]);
+  }, [range, page, groupId]);
   return (
     <>
-      <p className={styles.note}>{t('qol.capture_filter_help')}</p>
+      <p className={styles.note}>
+        {t(groupId ? 'qol.context_group_help' : 'qol.capture_filter_help')}
+      </p>
       {error && <p role="alert">{error}</p>}
       <div className={styles.browser}>
         <div className={styles.list} aria-busy={!data && !error}>
@@ -204,7 +242,9 @@ function ContextBrowser({ filters }: { filters: Filters }) {
               aria-pressed={id === item.id}
               onClick={() => setId(item.id)}
             >
-              <strong>{item.model}</strong>
+              <strong>
+                {item.key_label || t('qol.context_unknown_key')} · {item.model}
+              </strong>
               <span>{new Date(item.timestamp).toLocaleString()}</span>
               <span>
                 {item.format} · {item.stream ? t('qol.capture_stream') : t('qol.capture_nonstream')}{' '}
@@ -240,7 +280,7 @@ function ContextBrowser({ filters }: { filters: Filters }) {
           </div>
         </div>
         {id ? (
-          <ContextContent key={id} id={id} />
+          <ContextContent key={id} id={id} record={data?.items.find((item) => item.id === id)} />
         ) : (
           <p className={styles.note}>{t('qol.capture_select')}</p>
         )}
@@ -249,11 +289,12 @@ function ContextBrowser({ filters }: { filters: Filters }) {
   );
 }
 
-function ContextContent({ id }: { id: string }) {
+function ContextContent({ id, record }: { id: string; record?: ContextRecord }) {
   const { t } = useTranslation();
   const [data, setData] = useState<ContextBody | null>(null);
   const [error, setError] = useState('');
   const [part, setPart] = useState(0);
+  const [readable, setReadable] = useState(true);
   useEffect(() => {
     const abort = new AbortController();
     void qolApi
@@ -272,33 +313,62 @@ function ContextContent({ id }: { id: string }) {
     <div className={styles.content} aria-busy={!data && !error}>
       {error && <p role="alert">{error}</p>}
       {data?.truncated && <p role="status">{t('qol.capture_truncated')}</p>}
-      <pre role="region" tabIndex={0} aria-label={t('qol.capture_body')}>
-        {text.slice(part * 65536, (part + 1) * 65536)}
-      </pre>
-      {parts > 1 && (
-        <div className={styles.pager}>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={part === 0}
-            onClick={() => setPart(part - 1)}
-            aria-label={t('qol.capture_previous')}
-          >
-            ‹
-          </Button>
-          <span>
-            {part + 1} / {parts}
-          </span>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={part + 1 === parts}
-            onClick={() => setPart(part + 1)}
-            aria-label={t('qol.capture_next')}
-          >
-            ›
-          </Button>
+      <div className={styles.viewerHeading}>
+        <div role="radiogroup" aria-label={t('qol.context_view_mode')}>
+          <label>
+            <input type="radio" checked={readable} onChange={() => setReadable(true)} />
+            {t('qol.context_readable')}
+          </label>
+          <label>
+            <input type="radio" checked={!readable} onChange={() => setReadable(false)} />
+            JSON
+          </label>
         </div>
+        <details>
+          <summary>{t('qol.context_client')}</summary>
+          <p>{record?.client.user_agent || t('qol.context_not_reported')}</p>
+          <p>Originator: {record?.client.originator || '—'}</p>
+          <p title={record?.client.device_hash}>
+            {t('qol.context_device')}:{' '}
+            {record?.client.device_hash?.slice(0, 16) || t('qol.context_not_reported')}{' '}
+            {record?.client.device_source}
+          </p>
+          <p className={styles.note}>{t('qol.context_device_help')}</p>
+        </details>
+      </div>
+      {readable && data ? (
+        <ContextReadable body={data.body} />
+      ) : (
+        <>
+          <pre role="region" tabIndex={0} aria-label={t('qol.capture_body')}>
+            {text.slice(part * 65536, (part + 1) * 65536)}
+          </pre>
+          {parts > 1 && (
+            <div className={styles.pager}>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={part === 0}
+                onClick={() => setPart(part - 1)}
+                aria-label={t('qol.capture_previous')}
+              >
+                ‹
+              </Button>
+              <span>
+                {part + 1} / {parts}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={part + 1 === parts}
+                onClick={() => setPart(part + 1)}
+                aria-label={t('qol.capture_next')}
+              >
+                ›
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

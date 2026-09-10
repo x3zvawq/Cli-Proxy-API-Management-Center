@@ -61,6 +61,7 @@ export interface RequestRow {
   failure_status_code: number | null;
   failure_body: string | null;
   raw_tokens: Record<string, number> | null;
+  context_group: string;
 }
 export type ProjectedRequest = Pick<RequestRow, 'id'> & Partial<RequestRow>;
 export interface RequestPage {
@@ -131,6 +132,14 @@ export interface ContextRecord {
   original_bytes: number;
   stored_bytes: number;
   truncated: boolean;
+  group_id: string;
+  key_label: string;
+  client: {
+    user_agent?: string;
+    originator?: string;
+    device_hash?: string;
+    device_source?: string;
+  };
 }
 export interface ContextPage {
   items: ContextRecord[];
@@ -152,7 +161,11 @@ export const qolApi = {
   saveContextSettings: (settings: ContextSettings, signal: AbortSignal) =>
     apiClient.put<ContextStatus>(`${prefix}/context-settings`, settings, { signal }),
   contexts: (
-    params: Pick<Filters, 'start' | 'end' | 'model'> & { page: number; page_size: number },
+    params: Partial<Pick<Filters, 'start' | 'end' | 'model'>> & {
+      page: number;
+      page_size: number;
+      group_id?: string;
+    },
     signal: AbortSignal
   ) => apiClient.get<ContextPage>(`${prefix}/contexts`, { params, signal }),
   contextBody: async (id: string, signal: AbortSignal): Promise<ContextBody> => {
