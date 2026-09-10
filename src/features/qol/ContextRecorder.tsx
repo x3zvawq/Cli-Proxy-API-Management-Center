@@ -186,7 +186,8 @@ export function ContextRecorder({
           onCloseGroup();
         }}
         title={t(groupId ? 'qol.context_conversation' : 'qol.capture_browse')}
-        width={1100}
+        width="min(1480px, 100vw)"
+        className={styles.drawer}
       >
         {(open || groupId) && (
           <ConversationBrowser
@@ -236,6 +237,11 @@ function ContextBrowser({ filters, groupId }: { filters: Filters; groupId?: stri
       {error && <p role="alert">{error}</p>}
       <div className={styles.browser}>
         <div className={styles.list} aria-busy={!data && !error}>
+          {!data && !error && (
+            <p role="status" className={styles.loading}>
+              {t('qol.context_loading')}
+            </p>
+          )}
           {data?.items.map((item) => (
             <button
               type="button"
@@ -313,6 +319,11 @@ function ContextContent({ id, record }: { id: string; record?: ContextRecord }) 
   const parts = Math.max(1, Math.ceil(text.length / 65536));
   return (
     <div className={styles.content} aria-busy={!data && !error}>
+      {!data && !error && (
+        <p role="status" className={styles.loading}>
+          {t('qol.context_loading')}
+        </p>
+      )}
       {error && <p role="alert">{error}</p>}
       {data?.truncated && <p role="status">{t('qol.capture_truncated')}</p>}
       <div className={styles.viewerHeading}>

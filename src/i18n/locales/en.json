@@ -1,5 +1,15 @@
 {
   "qol": {
+    "context_loading": "Loading conversation…",
+    "context_message_nav": "Message navigation",
+    "context_expand_all": "Expand all",
+    "context_collapse_all": "Collapse all",
+    "context_jump_message": "Go to message",
+    "context_jump": "Go",
+    "context_jump_block": "Go to current content block",
+    "context_jump_segment": "Go to text segment",
+    "context_back_sessions": "Back to sessions",
+    "context_merge_notes": "About merging",
     "context_control": "Context recording: {{state}}",
     "context_on": "On",
     "context_off": "Off",

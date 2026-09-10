@@ -5,6 +5,7 @@ import { qolApi, type ConversationPage, type ConversationRecord, type Filters } 
 import { ContextReadable } from './ContextReadable';
 import { contextBlocks } from './contextBlocks';
 import styles from './ContextRecorder.module.scss';
+import { ContextJump } from './ContextJump';
 
 export function ConversationBrowser({
   filters,
@@ -18,7 +19,7 @@ export function ConversationBrowser({
   const { t } = useTranslation();
   const [snapshotMode, setSnapshotMode] = useState(false);
   return (
-    <>
+    <div className={styles.explorer}>
       <div
         className={`${styles.viewerHeading} ${styles.layoutModes}`}
         role="radiogroup"
@@ -33,7 +34,12 @@ export function ConversationBrowser({
           {t('qol.context_snapshots')}
         </label>
       </div>
-      {!snapshotMode && <p className={styles.note}>{t('qol.context_merge_help')}</p>}
+      {!snapshotMode && (
+        <details className={styles.note}>
+          <summary>{t('qol.context_merge_notes')}</summary>
+          {t('qol.context_merge_help')}
+        </details>
+      )}
       {snapshotMode ? (
         snapshots
       ) : groupId ? (
@@ -41,7 +47,7 @@ export function ConversationBrowser({
       ) : (
         <ConversationIndex filters={filters} />
       )}
-    </>
+    </div>
   );
 }
 
@@ -71,11 +77,27 @@ function ConversationIndex({ filters }: { filters: Filters }) {
       });
     return () => abort.abort();
   }, [range, page]);
+  if (id)
+    return (
+      <div className={styles.viewerSection}>
+        <div>
+          <Button size="sm" variant="secondary" onClick={() => setId('')}>
+            {t('qol.context_back_sessions')}
+          </Button>
+        </div>
+        <ConversationTimeline key={id} id={id} />
+      </div>
+    );
   return (
     <>
       {error && <p role="alert">{error}</p>}
-      <div className={styles.browser}>
+      <div className={styles.directory}>
         <div className={styles.list} aria-busy={!data && !error}>
+          {!data && !error && (
+            <p role="status" className={styles.loading}>
+              {t('qol.context_loading')}
+            </p>
+          )}
           {data?.items.map((item) => (
             <button
               type="button"
@@ -117,11 +139,6 @@ function ConversationIndex({ filters }: { filters: Filters }) {
             </Button>
           </div>
         </div>
-        {id ? (
-          <ConversationTimeline key={id} id={id} />
-        ) : (
-          <p className={styles.note}>{t('qol.capture_select')}</p>
-        )}
       </div>
     </>
   );
@@ -147,18 +164,28 @@ function ConversationTimeline({ id }: { id: string }) {
       });
     return () => abort.abort();
   }, [id, offset]);
-  const blocks = useMemo(
+  const entries = useMemo(
     () =>
-      data?.items.flatMap((item) => {
+      data?.items.flatMap((item, index) => {
         const value = ['input', 'messages', 'contents'].includes(item.field)
           ? [item.value]
           : item.value;
-        return contextBlocks(JSON.stringify({ [item.field]: value })) ?? [];
+        const blocks = contextBlocks(JSON.stringify({ [item.field]: value })) ?? [];
+        return blocks.map((block, part) => ({
+          block,
+          label:
+            blocks.length > 1 ? `${offset + index + 1}.${part + 1}` : String(offset + index + 1),
+        }));
       }) ?? [],
-    [data]
+    [data, offset]
   );
   return (
     <div className={styles.content} aria-busy={!data && !error}>
+      {!data && !error && (
+        <p role="status" className={styles.loading}>
+          {t('qol.context_loading')}
+        </p>
+      )}
       {error && <p role="alert">{error}</p>}
       {data && (
         <>
@@ -169,29 +196,42 @@ function ConversationTimeline({ id }: { id: string }) {
           {data.total === 0 ? (
             <p>{t('qol.capture_empty')}</p>
           ) : (
-            <ContextReadable key={offset} items={blocks} />
+            <ContextReadable
+              key={offset}
+              items={entries.map((x) => x.block)}
+              labels={entries.map((x) => x.label)}
+              navigation={
+                <>
+                  <ContextJump
+                    current={offset}
+                    total={data.total}
+                    onJump={(target) => setOffsets((old) => [...old, target])}
+                  />
+                  <div className={styles.pager}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={offsets.length === 1}
+                      onClick={() => setOffsets((old) => old.slice(0, -1))}
+                    >
+                      {t('qol.capture_previous')}
+                    </Button>
+                    <span>
+                      {Math.min(offset + 1, data.total)}–{data.next_offset}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={data.next_offset >= data.total}
+                      onClick={() => setOffsets((old) => [...old, data.next_offset])}
+                    >
+                      {t('qol.capture_next')}
+                    </Button>
+                  </div>
+                </>
+              }
+            />
           )}
-          <div className={styles.pager}>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={offsets.length === 1}
-              onClick={() => setOffsets((old) => old.slice(0, -1))}
-            >
-              {t('qol.capture_previous')}
-            </Button>
-            <span>
-              {Math.min(offset + 1, data.total)}–{data.next_offset} / {data.total}
-            </span>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={data.next_offset >= data.total}
-              onClick={() => setOffsets((old) => [...old, data.next_offset])}
-            >
-              {t('qol.capture_next')}
-            </Button>
-          </div>
         </>
       )}
     </div>

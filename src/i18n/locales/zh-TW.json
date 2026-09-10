@@ -1,5 +1,15 @@
 {
   "qol": {
+    "context_loading": "會話載入中…",
+    "context_message_nav": "訊息導覽",
+    "context_expand_all": "全部展開",
+    "context_collapse_all": "全部收起",
+    "context_jump_message": "跳至訊息",
+    "context_jump": "跳轉",
+    "context_jump_block": "跳至目前內容區塊",
+    "context_jump_segment": "跳至長文片段",
+    "context_back_sessions": "返回會話列表",
+    "context_merge_notes": "整合說明",
     "context_control": "上下文記錄：{{state}}",
     "context_on": "開啟",
     "context_off": "關閉",

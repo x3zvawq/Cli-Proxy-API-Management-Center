@@ -1,5 +1,15 @@
 {
   "qol": {
+    "context_loading": "Загрузка беседы…",
+    "context_message_nav": "Навигация по сообщениям",
+    "context_expand_all": "Развернуть всё",
+    "context_collapse_all": "Свернуть всё",
+    "context_jump_message": "К сообщению",
+    "context_jump": "Перейти",
+    "context_jump_block": "К блоку содержимого",
+    "context_jump_segment": "К части текста",
+    "context_back_sessions": "К списку бесед",
+    "context_merge_notes": "Об объединении",
     "context_control": "Запись контекста: {{state}}",
     "context_on": "Вкл.",
     "context_off": "Выкл.",
