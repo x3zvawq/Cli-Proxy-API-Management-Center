@@ -1,4 +1,6 @@
 import { apiClient } from '@/services/api/client';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { normalizeApiBase } from '@/utils/connection';
 import type { ModelPrice } from '@/utils/usage';
 
 export interface Totals {
@@ -135,7 +137,8 @@ export type Filters = {
   account?: string;
   result?: string;
 };
-const prefix = '/plugins/cpa-qol';
+// QoL declares its own v0 extension routes; the core management UI now uses v8.
+const prefix = () => `${normalizeApiBase(useAuthStore.getState().apiBase)}/v0/management/plugins/cpa-qol`;
 export interface ContextSettings {
   enabled: boolean;
   retention_hours: number;
@@ -236,19 +239,19 @@ export interface RefreshJob {
 }
 export const qolApi = {
   startProbe: (request: ProbeRequest) =>
-    apiClient.post<{ id: string; status: string }>(`${prefix}/account-test`, request),
+    apiClient.post<{ id: string; status: string }>(`${prefix()}/account-test`, request),
   probe: async (id: string, signal: AbortSignal): Promise<ProbeResult> => {
-    const wire = await apiClient.get<{ result_gzip: string }>(`${prefix}/account-test`, {
+    const wire = await apiClient.get<{ result_gzip: string }>(`${prefix()}/account-test`, {
       params: { id },
       signal,
     });
     return JSON.parse(await decompressContext(wire.result_gzip, signal)) as ProbeResult;
   },
   cancelProbe: (id: string) =>
-    apiClient.post(`${prefix}/account-test-cancel`, undefined, { params: { id } }),
+    apiClient.post(`${prefix()}/account-test-cancel`, undefined, { params: { id } }),
   conversationIndex: async (id: string, signal: AbortSignal): Promise<ConversationDirectory> => {
     const wire = await apiClient.get<Omit<ConversationDirectory, 'items'> & { items_gzip: string }>(
-      `${prefix}/conversation-index`,
+      `${prefix()}/conversation-index`,
       { params: { id }, signal }
     );
     return {
@@ -264,7 +267,7 @@ export const qolApi = {
     signal: AbortSignal
   ): Promise<ConversationDetail> => {
     const wire = await apiClient.get<{ id: string; field: string; value_gzip: string }>(
-      `${prefix}/conversation-item`,
+      `${prefix()}/conversation-item`,
       { params: { id, item }, signal }
     );
     return {
@@ -277,7 +280,7 @@ export const qolApi = {
     params: Partial<Filters> & { page: number; page_size: number },
     signal: AbortSignal
   ) =>
-    apiClient.get<{ items: ConversationRecord[]; total: number }>(`${prefix}/conversations`, {
+    apiClient.get<{ items: ConversationRecord[]; total: number }>(`${prefix()}/conversations`, {
       params,
       signal,
     }),
@@ -287,7 +290,7 @@ export const qolApi = {
     signal: AbortSignal
   ): Promise<ConversationPage> => {
     const wire = await apiClient.get<Omit<ConversationPage, 'items'> & { items_gzip: string }>(
-      `${prefix}/conversation`,
+      `${prefix()}/conversation`,
       { params: { id, offset }, signal }
     );
     return {
@@ -296,9 +299,9 @@ export const qolApi = {
     };
   },
   contextStatus: (signal: AbortSignal) =>
-    apiClient.get<ContextStatus>(`${prefix}/context-settings`, { signal }),
+    apiClient.get<ContextStatus>(`${prefix()}/context-settings`, { signal }),
   saveContextSettings: (settings: ContextSettings, signal: AbortSignal) =>
-    apiClient.put<ContextStatus>(`${prefix}/context-settings`, settings, { signal }),
+    apiClient.put<ContextStatus>(`${prefix()}/context-settings`, settings, { signal }),
   contexts: (
     params: Partial<Pick<Filters, 'start' | 'end' | 'model'>> & {
       page: number;
@@ -306,32 +309,32 @@ export const qolApi = {
       group_id?: string;
     },
     signal: AbortSignal
-  ) => apiClient.get<ContextPage>(`${prefix}/contexts`, { params, signal }),
+  ) => apiClient.get<ContextPage>(`${prefix()}/contexts`, { params, signal }),
   contextBody: async (id: string, signal: AbortSignal): Promise<ContextBody> => {
     const wire = await apiClient.get<{ id: string; body_gzip: string; truncated: boolean }>(
-      `${prefix}/context`,
+      `${prefix()}/context`,
       { params: { id }, signal }
     );
     const body = await decompressContext(wire.body_gzip, signal);
     return { id: wire.id, body, truncated: wire.truncated };
   },
   summary: (params: Filters, signal: AbortSignal) =>
-    apiClient.get<Summary>(`${prefix}/summary`, { params, signal }),
+    apiClient.get<Summary>(`${prefix()}/summary`, { params, signal }),
   requests: (
     params: Filters & { page: number; page_size: number; fields?: string },
     signal: AbortSignal
-  ) => apiClient.get<RequestPage>(`${prefix}/requests`, { params, signal }),
-  accounts: (signal: AbortSignal) => apiClient.get<Account[]>(`${prefix}/accounts`, { signal }),
-  prices: (signal: AbortSignal) => apiClient.get<Prices>(`${prefix}/prices`, { signal }),
-  savePrices: (prices: Prices) => apiClient.put<Prices>(`${prefix}/prices`, prices),
-  models: (signal?: AbortSignal) => apiClient.get<string[]>(`${prefix}/models`, { signal }),
+  ) => apiClient.get<RequestPage>(`${prefix()}/requests`, { params, signal }),
+  accounts: (signal: AbortSignal) => apiClient.get<Account[]>(`${prefix()}/accounts`, { signal }),
+  prices: (signal: AbortSignal) => apiClient.get<Prices>(`${prefix()}/prices`, { signal }),
+  savePrices: (prices: Prices) => apiClient.put<Prices>(`${prefix()}/prices`, prices),
+  models: (signal?: AbortSignal) => apiClient.get<string[]>(`${prefix()}/models`, { signal }),
   refreshQuota: (account?: string, signal?: AbortSignal) =>
-    apiClient.post<RefreshJob>(`${prefix}/quota-refresh`, undefined, {
+    apiClient.post<RefreshJob>(`${prefix()}/quota-refresh`, undefined, {
       params: { account },
       signal,
     }),
   waitRefresh: (id: string, signal: AbortSignal) =>
-    apiClient.get<RefreshJob>(`${prefix}/quota-refresh`, {
+    apiClient.get<RefreshJob>(`${prefix()}/quota-refresh`, {
       params: { id },
       signal,
       timeout: 25000,

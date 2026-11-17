@@ -9,6 +9,9 @@ import zhTW from './locales/zh-TW.json';
 import en from './locales/en.json';
 import ru from './locales/ru.json';
 import { forkTranslations, mergeTranslations } from './forkTranslations';
+import vi from './locales/vi.json';
+import ko from './locales/ko.json';
+import tr from './locales/tr.json';
 import { getInitialLanguage } from '@/utils/language';
 
 i18n.use(initReactI18next).init({
@@ -16,7 +19,10 @@ i18n.use(initReactI18next).init({
     'zh-CN': { translation: mergeTranslations(zhCN, forkTranslations['zh-CN']) },
     'zh-TW': { translation: mergeTranslations(zhTW, forkTranslations['zh-TW']) },
     en: { translation: mergeTranslations(en, forkTranslations.en) },
-    ru: { translation: mergeTranslations(ru, forkTranslations.ru) }
+    ru: { translation: mergeTranslations(ru, forkTranslations.ru) },
+    vi: { translation: vi },
+    ko: { translation: ko },
+    tr: { translation: tr },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'zh-CN',

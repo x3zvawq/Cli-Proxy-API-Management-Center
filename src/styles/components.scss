@@ -120,6 +120,27 @@ textarea {
   }
 }
 
+/* 标签行：标签文字 + 紧随其后的 InfoTip（Input 把 hint 收进提示时使用）。 */
+.form-label-row {
+  display: block;
+  min-width: 0;
+}
+
+/* 视觉隐藏、辅助技术可读。
+   -focusable 变体：内部元素获得焦点时自动显示（防止链接等可聚焦内容成为「隐形焦点」）。 */
+.visually-hidden,
+.visually-hidden-focusable:not(:focus-within) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .card {
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -184,102 +205,6 @@ textarea {
 
   &.muted {
     color: var(--text-secondary);
-  }
-}
-
-.notification-container {
-  position: fixed;
-  top: $spacing-lg;
-  right: $spacing-lg;
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-sm;
-  z-index: $z-notification;
-  max-width: 360px;
-}
-
-@keyframes notification-enter {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes notification-exit {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-}
-
-.notification {
-  padding: $spacing-md;
-  border-radius: $radius-md;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: $spacing-sm;
-
-  // Animation states
-  &.entering {
-    animation: notification-enter 0.3s ease-out forwards;
-  }
-
-  &.exiting {
-    animation: notification-exit 0.3s ease-in forwards;
-  }
-
-  &.success {
-    border-color: rgba($success-color, 0.4);
-  }
-  &.warning {
-    border-color: rgba($warning-color, 0.4);
-  }
-  &.error {
-    border-color: rgba($error-color, 0.4);
-  }
-
-  .message {
-    flex: 1;
-    font-weight: 500;
-  }
-
-  .close-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    border-radius: $radius-md;
-    cursor: pointer;
-    transition:
-      color 0.15s ease,
-      background-color 0.15s ease;
-
-    svg {
-      display: block;
-    }
-
-    &:hover {
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-    }
   }
 }
 

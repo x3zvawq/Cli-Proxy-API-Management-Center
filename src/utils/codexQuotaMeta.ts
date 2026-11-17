@@ -24,6 +24,7 @@ import {
   resolveCodexSubscriptionActiveUntil,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
+import { normalizeCodexAccountCredits, type CodexQuotaData } from '@/features/quota/providers/codex/data';
 
 const CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS = 8000;
 
@@ -54,15 +55,7 @@ export interface CodexQuotaMeta {
 }
 
 export interface CodexQuotaFetchWithMetaResult {
-  data: {
-    planType: string | null;
-    subscriptionActiveUntil: string | number | null;
-    rateLimitResetCreditsAvailableCount: number | null;
-    rateLimitResetCreditsApplicableAvailableCount: number | null;
-    rateLimitResetCredits: CodexRateLimitResetCredit[];
-    rateLimitResetCreditsError: string;
-    windows: CodexQuotaWindow[];
-  };
+  data: CodexQuotaData;
   meta: CodexQuotaMeta;
 }
 
@@ -390,10 +383,13 @@ export const fetchCodexQuotaWithMeta = async (
     resetCreditsData.applicableAvailableCount ??
     rateLimitResetCreditsAvailableCount;
   const { windows, meta } = buildCodexQuotaWindowsWithMeta(payload, t, planType);
+  const accountCredits = normalizeCodexAccountCredits(payload.credits);
   return {
     data: {
       planType,
       subscriptionActiveUntil,
+      creditBalance: accountCredits.balance,
+      creditsUnlimited: accountCredits.unlimited,
       rateLimitResetCreditsAvailableCount,
       rateLimitResetCreditsApplicableAvailableCount,
       rateLimitResetCredits: resetCreditsData.credits,

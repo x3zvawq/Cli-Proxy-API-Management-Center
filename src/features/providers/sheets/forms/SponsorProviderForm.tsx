@@ -17,9 +17,9 @@ import {
 import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
 import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
-import type { ModelInfo } from '@/utils/models';
+import { removeModelAt } from '../../modelEntries';
+import { syncDiscoveredModels } from '../../discoverySelection';
 import type { ApiKeyFunUsageSummary } from '../../sponsor';
-import { readThinkingLevels } from '../../thinkingLevels';
 import { isSponsorPartialMutationError } from '../../sponsorMutationRecovery';
 import {
   discoveryBrandForSponsorProtocol,
@@ -44,6 +44,13 @@ import { ModelEntriesEditor } from './ModelEntriesEditor';
 import { useModelDiscovery, type UseModelDiscoveryResult } from './useModelDiscovery';
 import { useSponsorUsageCheck, type SponsorUsageMessages } from './useSponsorUsageCheck';
 import styles from './sharedForm.module.scss';
+import { readRuntimePolicy, validateRuntimePolicy } from '../../runtimePolicy';
+import { readModelOptions, validateModelOptions } from '../../modelOptions';
+import type { ModelAlias } from '@/types';
+import { FieldLabel } from '@/components/ui/FieldLabel';
+import { RuntimePolicyEditor } from './RuntimePolicyEditor';
+import { ProviderBehaviorEditor } from './ProviderBehaviorEditor';
+import { pickProviderBehavior } from '../../providerBehavior';
 
 interface SponsorProviderFormProps {
   brand?: SponsorProviderBrand;
@@ -58,7 +65,6 @@ interface SponsorProviderFormProps {
 
 interface SponsorModelSectionProps {
   label: string;
-  description: string;
   protocol: SponsorProtocol;
   models: ModelEntryInput[];
   discovery: UseModelDiscoveryResult;
@@ -92,7 +98,8 @@ const emptySponsorKeyEntry = (
   proxyUrl: '',
   prefix: '',
   disabled: false,
-  disableCooling: false,
+  disableCooling: undefined,
+  runtimePolicy: readRuntimePolicy(),
   priority: undefined,
   weight: undefined,
   models: [emptyModel()],
@@ -105,7 +112,7 @@ const emptySponsorForm = (definition: SponsorProviderDefinition): ProviderEntryF
   proxyUrl: '',
   prefix: '',
   disabled: false,
-  disableCooling: false,
+  disableCooling: undefined,
   priority: undefined,
   weight: undefined,
   models: [],
@@ -142,27 +149,16 @@ const isHealthyUsageSummary = (summary: ApiKeyFunUsageSummary): boolean => {
   return summary.isValid && (!normalizedStatus || normalizedStatus === 'active');
 };
 
-const modelsFromConfig = (
-  models:
-    | Array<{
-        name?: string;
-        alias?: string;
-        priority?: number;
-        testModel?: string;
-        image?: boolean;
-        thinking?: Record<string, unknown>;
-      }>
-    | undefined
-): ModelEntryInput[] =>
+const modelsFromConfig = (models: ModelAlias[] | undefined): ModelEntryInput[] =>
   models?.length
     ? models.map((model) => ({
+        sourceIndex: model.sourceIndex,
         name: model.name ?? '',
         alias: model.alias ?? '',
         priority: model.priority,
-        testModel: model.testModel,
         image: model.image === true,
         thinkingJson: model.thinking ? JSON.stringify(model.thinking, null, 2) : '',
-        thinkingLevels: readThinkingLevels(model.thinking),
+        ...readModelOptions(model),
       }))
     : [emptyModel()];
 
@@ -180,7 +176,9 @@ const sponsorEntryFromProviderKey = (
   proxyUrl: config.proxyUrl ?? '',
   prefix: config.prefix ?? '',
   disabled: hasDisableAllModelsRule(config.excludedModels),
-  disableCooling: config.disableCooling === true,
+  disableCooling: config.disableCooling,
+  runtimePolicy: readRuntimePolicy(config),
+  ...pickProviderBehavior(config, protocol),
   priority: config.priority,
   weight: config.weight,
   models: modelsFromConfig(config.models),
@@ -198,7 +196,9 @@ const sponsorEntryFromOpenAI = (
     proxyUrl: firstEntry?.proxyUrl ?? '',
     prefix: config.prefix ?? '',
     disabled: config.disabled === true,
-    disableCooling: config.disableCooling === true,
+    disableCooling: config.disableCooling,
+    runtimePolicy: readRuntimePolicy(config),
+    ...pickProviderBehavior(config, 'openaiCompatibility'),
     priority: config.priority,
     weight: firstEntry?.weight,
     models: modelsFromConfig(config.models),
@@ -221,42 +221,8 @@ const sponsorKeyEntriesFromRaw = (
   return entries.length ? entries : [emptySponsorKeyEntry(definition)];
 };
 
-const applyDiscoveredModels = (
-  currentModels: ModelEntryInput[],
-  incoming: ModelInfo[]
-): ModelEntryInput[] => {
-  if (!incoming.length) return currentModels;
-  const seen = new Set<string>();
-  const next: ModelEntryInput[] = [];
-  currentModels.forEach((entry) => {
-    const trimmed = (entry.name ?? '').trim();
-    if (trimmed) {
-      if (seen.has(trimmed)) return;
-      seen.add(trimmed);
-    }
-    next.push(entry);
-  });
-  const placeholderIdx = next.findIndex(
-    (entry) => !(entry.name ?? '').trim() && !(entry.alias ?? '').trim()
-  );
-  if (placeholderIdx !== -1) {
-    next.splice(placeholderIdx, 1);
-  }
-  incoming.forEach((info) => {
-    const trimmed = info.name.trim();
-    if (!trimmed || seen.has(trimmed)) return;
-    seen.add(trimmed);
-    next.push({
-      name: trimmed,
-      alias: (info.alias ?? '').trim(),
-    });
-  });
-  return next.length ? next : [emptyModel()];
-};
-
 function SponsorModelSection({
   label,
-  description,
   protocol,
   models,
   discovery,
@@ -285,7 +251,6 @@ function SponsorModelSection({
   return (
     <Collapsible label={label}>
       <div className={styles.entriesList}>
-        <p className={styles.sectionDesc}>{description}</p>
         <div className={styles.entriesToolbar}>
           <button
             type="button"
@@ -305,17 +270,20 @@ function SponsorModelSection({
             hasFetched={discovery.hasFetched}
             existingNames={existingModelNames}
             mutating={mutating}
-            onApply={(picked) => onChange(applyDiscoveredModels(modelsList, picked))}
+            onApply={(picked, catalog) =>
+              onChange(syncDiscoveredModels(modelsList, picked, catalog))
+            }
             onReload={() => void discovery.fetch()}
             onClose={() => setDiscoveryOpen(false)}
           />
         ) : null}
         <ModelEntriesEditor
+          providerBrand={protocol === 'openai' ? 'openaiCompatibility' : protocol}
           models={modelsList}
           supportsImage={protocol === 'openai'}
           supportsThinking
           mutating={mutating}
-          removeDisabled={modelsList.length <= 1}
+          removeDisabled={false}
           onUpdate={(modelIndex, patch) =>
             onChange(
               modelsList.map((item, itemIndex) =>
@@ -324,10 +292,7 @@ function SponsorModelSection({
             )
           }
           onAdd={() => onChange([...modelsList, emptyModel()])}
-          onRemove={(modelIndex) => {
-            const next = modelsList.filter((_, itemIndex) => itemIndex !== modelIndex);
-            onChange(next.length ? next : [emptyModel()]);
-          }}
+          onRemove={(modelIndex) => onChange(removeModelAt(modelsList, modelIndex))}
         />
       </div>
     </Collapsible>
@@ -399,6 +364,7 @@ function SponsorKeyEntryCard({
   const discovery = useModelDiscovery({
     brand: discoveryBrandForSponsorProtocol(entry.protocol),
     baseUrl: endpointUrl,
+    proxyUrl: entry.proxyUrl,
     formHeaders: discoveryHeaders,
     apiKey: entry.apiKey,
     fallbackApiKey: entry.existingApiKey,
@@ -477,15 +443,24 @@ function SponsorKeyEntryCard({
               disabled={mutating}
               ariaLabel={t('providersPage.sponsor.protocol')}
             />
-            <span className={styles.labelHint}>{t('providersPage.sponsor.protocolHint')}</span>
           </div>
 
           {definition.baseUrlOptions.length > 1 ? (
             <div className={styles.field}>
-              <span className={styles.label}>
-                {t('providersPage.sponsor.urlMode', { provider: definition.displayName })}
-              </span>
-              <div className={styles.sponsorUrlOptions} role="radiogroup">
+              <FieldLabel
+                className={styles.labelLine}
+                labelClassName={styles.label}
+                id={`${formId}-group-${index}-base-url-label`}
+                label={t('providersPage.sponsor.urlMode', { provider: definition.displayName })}
+                hint={t('providersPage.sponsor.urlHint')}
+                hintId={`${formId}-group-${index}-base-url-hint`}
+              />
+              <div
+                className={styles.sponsorUrlOptions}
+                role="radiogroup"
+                aria-labelledby={`${formId}-group-${index}-base-url-label`}
+                aria-describedby={`${formId}-group-${index}-base-url-hint`}
+              >
                 {definition.baseUrlOptions.map((option) => {
                   const checked = definition.resolveBaseUrl(entry.baseUrl) === option.baseUrl;
                   const className = [
@@ -519,7 +494,6 @@ function SponsorKeyEntryCard({
                   );
                 })}
               </div>
-              <span className={styles.labelHint}>{t('providersPage.sponsor.urlHint')}</span>
             </div>
           ) : null}
 
@@ -531,12 +505,18 @@ function SponsorKeyEntryCard({
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor={`${formId}-group-${index}-api-key`}>
-              {t('providersPage.form.apiKey')}
-            </label>
+            <FieldLabel
+              className={styles.labelLine}
+              labelClassName={styles.label}
+              htmlFor={`${formId}-group-${index}-api-key`}
+              label={t('providersPage.form.apiKey')}
+              hint={t('providersPage.sponsor.apiKeyHint')}
+              hintId={`${formId}-group-${index}-api-key-hint`}
+            />
             <div className={styles.passwordField}>
               <input
                 id={`${formId}-group-${index}-api-key`}
+                aria-describedby={`${formId}-group-${index}-api-key-hint`}
                 className={styles.passwordInput}
                 type={showApiKey ? 'text' : 'password'}
                 value={entry.apiKey}
@@ -571,7 +551,6 @@ function SponsorKeyEntryCard({
                 {showApiKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
               </button>
             </div>
-            <span className={styles.labelHint}>{t('providersPage.sponsor.apiKeyHint')}</span>
           </div>
 
           {definition.supportsUsageCheck ? (
@@ -691,11 +670,17 @@ function SponsorKeyEntryCard({
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor={`${formId}-group-${index}-weight`}>
-              {t('providersPage.form.weight')}
-            </label>
+            <FieldLabel
+              className={styles.labelLine}
+              labelClassName={styles.label}
+              htmlFor={`${formId}-group-${index}-weight`}
+              label={t('providersPage.form.weight')}
+              hint={t('providersPage.form.weightHint')}
+              hintId={`${formId}-group-${index}-weight-hint`}
+            />
             <input
               id={`${formId}-group-${index}-weight`}
+              aria-describedby={`${formId}-group-${index}-weight-hint`}
               type="number"
               step="1"
               max={MAX_CREDENTIAL_WEIGHT}
@@ -709,7 +694,6 @@ function SponsorKeyEntryCard({
               }
               disabled={mutating}
             />
-            <span className={styles.labelHint}>{t('providersPage.form.weightHint')}</span>
           </div>
 
           <label className={styles.checkboxRow}>
@@ -720,29 +704,23 @@ function SponsorKeyEntryCard({
               disabled={mutating}
               onChange={(event) => updateEntry({ disabled: event.target.checked })}
             />
-            <span className={styles.checkboxText}>
-              <span>{t('providersPage.form.disabled')}</span>
-              <small>{t('providersPage.form.disabledHint')}</small>
-            </span>
+            <span className={styles.checkboxText}>{t('providersPage.form.disabled')}</span>
           </label>
 
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              className={styles.checkboxBox}
-              checked={entry.disableCooling ?? false}
-              disabled={mutating}
-              onChange={(event) => updateEntry({ disableCooling: event.target.checked })}
-            />
-            <span className={styles.checkboxText}>
-              <span>{t('providersPage.form.disableCooling')}</span>
-              <small>{t('providersPage.form.disableCoolingHint')}</small>
-            </span>
-          </label>
+          <ProviderBehaviorEditor
+            brand={entry.protocol === 'openai' ? 'openaiCompatibility' : entry.protocol}
+            value={entry}
+            onChange={updateEntry}
+            disabled={mutating}
+          />
+          <RuntimePolicyEditor
+            value={entry.runtimePolicy ?? readRuntimePolicy()}
+            onChange={(runtimePolicy) => updateEntry({ runtimePolicy })}
+            disabled={mutating}
+          />
 
           <SponsorModelSection
             label={t(`providersPage.sponsor.protocolModels.${modelKey}`)}
-            description={t(`providersPage.sponsor.protocolModelHints.${modelKey}`)}
             protocol={entry.protocol}
             models={entry.models}
             discovery={discovery}
@@ -828,6 +806,13 @@ export function SponsorProviderForm({
   };
 
   const validateEntries = (): string | null => {
+    for (const entry of entries) {
+      const modelError = validateModelOptions(entry.models);
+      if (modelError) return t(modelError);
+      if (!entry.runtimePolicy) continue;
+      const policyError = validateRuntimePolicy(entry.runtimePolicy);
+      if (policyError) return t(policyError);
+    }
     if (!entries.length) {
       return mode === 'edit' ? null : t('providersPage.sponsor.validation.keyRequired');
     }
